@@ -227,3 +227,97 @@ Great news! Your transaction has been successfully confirmed. 🎉
 
 Your transaction is now securely recorded on the blockchain.
 """
+
+
+ADD_LIQUIDITY: Final = """
+Extract EXACTLY two token-amount pairs from the input for adding liquidity.
+
+Each pair consists of:
+- A positive float amount
+- A token symbol from: FLR, USDC, WFLR, USDT, sFLR, WETH
+
+Input formats to recognize:
+- "<amount> <token>" (e.g., "100 FLR")
+- "<token> <amount>" (e.g., "FLR 100")
+
+Rules:
+- Exactly two different tokens must be specified
+- Each token must have exactly one amount
+- Tokens must be different
+- Amounts must be positive floats
+- Normalize token symbols to uppercase
+
+Response format:
+{
+  "token_a": "<UPPERCASE_TOKEN_SYMBOL>",
+  "amount_a": <float_value>,
+  "token_b": "<UPPERCASE_TOKEN_SYMBOL>",
+  "amount_b": <float_value>
+}
+
+Where token_a and token_b are sorted alphabetically.
+
+Fail if:
+- Less or more than two token-amount pairs
+- Tokens are the same
+- Any amount is not positive
+- Any token not in listed tokens
+
+Examples:
+✓ "add 100 FLR and 50 USDC" → {"token_a": "FLR", "amount_a": 100.0, "token_b": "USDC", "amount_b": 50.0}
+✓ "add liquidity with 200 WFLR and 300 USDT" → {"token_a": "USDT", "amount_a": 300.0, "token_b": "WFLR", "amount_b": 200.0}
+✗ "add 100 FLR and 50 FLR" → FAIL (same token)
+✗ "add 100 FLR" → FAIL (only one pair)
+"""
+
+REMOVE_LIQUIDITY: Final = """
+Extract EXACTLY three pieces of information from the input for removing liquidity:
+
+1. TOKEN A
+   Valid formats:
+   • Native token: "FLR" or "flr"
+   • Listed tokens: "USDC", "WFLR", "USDT", "sFLR", "WETH"
+   • Case-insensitive match
+   • Normalize to uppercase
+
+2. TOKEN B
+   Same rules as TOKEN A
+   • Must be different from TOKEN A
+
+3. LP TOKEN AMOUNT
+   Number extraction rules:
+   • Convert written numbers to digits (e.g., "five" → 5.0)
+   • Handle decimals and integers
+   • Convert ALL integers to float (e.g., 100 → 100.0)
+   • Valid formats:
+     - Decimal: "1.5", "0.5"
+     - Integer: "1", "100"
+     - With context: "100 LP tokens", "50 lp"
+   • Extract first valid number only
+   • Amount MUST be positive
+   • FAIL if no valid amount found
+
+Input: ${user_input}
+
+Response format:
+{
+  "token_a": "<UPPERCASE_TOKEN_SYMBOL>",
+  "token_b": "<UPPERCASE_TOKEN_SYMBOL>",
+  "lp_amount": <float_value>
+}
+
+Where token_a and token_b are sorted alphabetically.
+
+Rules:
+- Exactly two different tokens must be specified
+- Exactly one amount must be specified
+- Tokens must be different
+- Amount must be positive float
+- Fail if any condition not met
+
+Examples:
+✓ "remove 100 LP tokens from FLR-USDC pool" → {"token_a": "FLR", "token_b": "USDC", "lp_amount": 100.0}
+✓ "remove liquidity from WFLR-USDT with 50 LP tokens" → {"token_a": "USDT", "token_b": "WFLR", "lp_amount": 50.0}
+✗ "remove 100 LP tokens from FLR-FLR pool" → FAIL (same token)
+✗ "remove FLR-USDC pool" → FAIL (missing amount)
+"""
