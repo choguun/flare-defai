@@ -9,8 +9,11 @@ RUN npm run build
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS backend-builder
 ADD . /flare-defai
 WORKDIR /flare-defai
-RUN uv venv .venv && \
-    uv pip install -e . --config-setting editable_mode=compat
+
+# Install dependencies with pip instead of uv sync to avoid the hatchling error
+RUN python -m uv venv .venv && \
+    . ./.venv/bin/activate && \
+    python -m uv pip install -r <(python -c "import tomli; print('\n'.join('{}=={}'.format(d.get('name', n), d.get('version', '*')) for n, d in tomli.load(open('pyproject.toml', 'rb'))['project'].get('dependencies', {}).items()))")
 
 # Stage 3: Final Image
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
