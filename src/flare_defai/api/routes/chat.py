@@ -207,6 +207,7 @@ class ChatRouter:
             SemanticRouterResponse.SEND_TOKEN: self.handle_send_token,
             SemanticRouterResponse.SWAP_TOKEN: self.handle_swap_token,
             SemanticRouterResponse.ADD_LIQUIDITY: self.handle_add_liquidity,
+            SemanticRouterResponse.CHECK_BALANCE: self.handle_check_balance,
             SemanticRouterResponse.REQUEST_ATTESTATION: self.handle_attestation,
             SemanticRouterResponse.CONVERSATIONAL: self.handle_conversation,
         }
@@ -229,7 +230,11 @@ class ChatRouter:
                 or existing account
         """
         if self.blockchain.address:
-            return {"response": f"Account exists - {self.blockchain.address}"}
+            # Get balance in both FLR and USD
+            flr_balance, usd_balance = self.blockchain.check_balance_usd()
+            usd_display = f"(${usd_balance:.2f})" if usd_balance is not None else "(USD value unavailable)"
+            return {"response": f"Account exists - {self.blockchain.address}\nBalance: {flr_balance:.6f} FLR {usd_display}"}
+            
         address = self.blockchain.generate_account()
         prompt, mime_type, schema = self.prompts.get_formatted_prompt(
             "generate_account", address=address
@@ -244,10 +249,10 @@ class ChatRouter:
         Handle token sending requests.
 
         Args:
-            message: Message containing token sending details
+            message: User message containing token sending details
 
         Returns:
-            dict[str, str]: Response containing transaction preview or follow-up prompt
+            dict[str, str]: Response containing transaction result
         """
         if not self.blockchain.address:
             await self.handle_generate_account(message)
@@ -280,6 +285,37 @@ class ChatRouter:
             + f"FLR to {tx.get('to')}\nType CONFIRM to proceed."
         )
         return {"response": formatted_preview}
+
+    async def handle_check_balance(self, _: str) -> dict[str, str]:
+        """
+        Handle balance check requests with USD value conversion.
+
+        Args:
+            _: Unused message parameter
+
+        Returns:
+            dict[str, str]: Response containing balance information in FLR and USD
+        """
+        if not self.blockchain.address:
+            return {"response": "No account exists. Please create an account first with 'Create an account for me'."}
+            
+        # Get all token balances with USD values
+        token_balances = self.blockchain.get_token_balances_with_usd()
+        
+        # Format the response
+        response_lines = ["Your current balances:"]
+        
+        for token, (amount, usd_value) in token_balances.items():
+            usd_display = f"(${usd_value:.2f})" if usd_value is not None else "(USD value unavailable)"
+            response_lines.append(f"{amount:.6f} {token} {usd_display}")
+            
+        # Add price information
+        flr_price, timestamp = self.blockchain.ftso_feed.get_price("FLR")
+        if flr_price is not None:
+            response_lines.append(f"\nCurrent FLR price: ${flr_price:.4f} USD")
+            response_lines.append(f"Price data timestamp: {timestamp}")
+        
+        return {"response": "\n".join(response_lines)}
 
     async def handle_swap_token(self, message: str) -> dict[str, str]:
         """

@@ -30,6 +30,7 @@ class SemanticRouterResponse(str, Enum):
         SEND_TOKEN: Route to token sending workflow
         SWAP_TOKEN: Route to token swapping workflow
         ADD_LIQUIDITY: Route to liquidity provision workflow
+        CHECK_BALANCE: Route to balance checking workflow
         REQUEST_ATTESTATION: Route to attestation request handling
         CONVERSATIONAL: Route to general conversational response
     """
@@ -38,6 +39,7 @@ class SemanticRouterResponse(str, Enum):
     SEND_TOKEN = "SendToken"
     SWAP_TOKEN = "SwapToken"
     ADD_LIQUIDITY = "AddLiquidity"
+    CHECK_BALANCE = "CheckBalance"
     REQUEST_ATTESTATION = "RequestAttestation"
     CONVERSATIONAL = "Conversational"
 

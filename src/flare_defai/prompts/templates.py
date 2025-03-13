@@ -19,12 +19,17 @@ Categories (in order of precedence):
    • Must involve exchanging one token type for another
    • Should mention both source and target tokens
 
-4. REQUEST_ATTESTATION
+4. CHECK_BALANCE
+   • Keywords: balance, how much, check funds, show tokens, wallet value
+   • Must express intent to view current account balance
+   • May include requests for USD value or price information
+
+5. REQUEST_ATTESTATION
    • Keywords: attestation, verify, prove, check enclave
    • Must specifically request verification or attestation
    • Related to security or trust verification
 
-5. CONVERSATIONAL (default)
+6. CONVERSATIONAL (default)
    • Use when input doesn't clearly match above categories
    • General questions, greetings, or unclear requests
    • Any ambiguous or multi-category inputs
