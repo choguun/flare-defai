@@ -3,6 +3,11 @@ DeFi Module
 
 This module implements decentralized finance operations on the Flare network,
 including token swaps through Uniswap-compatible protocols.
+
+Integration with SparkDEX (V2 & V3.1 DEX):
+- Supports token swaps via V2 and V3 routers
+- Supports liquidity provision for token pairs
+- Uses verified contract addresses from FlareScan (https://flarescan.com)
 """
 
 import json
@@ -215,12 +220,29 @@ TOKEN_ADDRESSES = {
     "sFLR": "0x02f0826ef6aD107Cfc861152B32B52fD11BaB9ED",
 }
 
-# Router contracts for Flare/Coston2
-UNISWAP_V2_ROUTER = "0xF4943f2dEc7E4914216FCc88ee07FE4E16F14377"  # Example V2 router
-UNISWAP_V3_ROUTER = "0x28239F8e7Dc9A8773291404Bcb7995a41b37b56B"  # Example V3 router
-UNISWAP_V3_POSITION_MANAGER = (
-    "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32"  # Example V3 position manager
-)
+# Router contracts for SparkDEX on Flare network
+# Addresses verified on https://flarescan.com
+V2_FACTORY = "0x16b619B04c961E8f4F06C10B42FDAbb328980A89"
+UNISWAP_V2_ROUTER = "0x4a1E5A90e9943467FAd1acea1E7F0e5e88472a1e"  # SparkDEX UniswapV2Router02
+UNISWAP_V3_ROUTER = "0x8a1E35F5c98C4E85B36B7B253222eE17773b2781"  # SparkDEX SwapRouter
+V3_FACTORY = "0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652"
+UNIVERSAL_ROUTER = "0x0f3D8a38D4c74afBebc2c42695642f0e3acb15D3"
+UNISWAP_V3_POSITION_MANAGER = "0xEE5FF5Bc5F852764b5584d92A4d592A53DC527da"  # SparkDEX NonfungiblePositionManager
+
+# Additional SparkDEX contracts
+V3_MIGRATOR = "0xf2f986C04387570A7C7819fac51bd553bb0814af"
+TOKEN_DISTRIBUTOR = "0x30FAA249e1ec3e75e203feBD35eb010b8E7BD22B"
+UNSUPPORTED = "0x38D411c8bBA193C8C8393DAAcEa67F9d9105EFB7"
+QUOTER_V2 = "0x5B5513c55fd06e2658010c121c37b07fC8e8B705"
+PERMIT2 = "0xB952578f3520EE8Ea45b7914994dcf4702cEe578"
+NFT_DESCRIPTOR = "0x840777EF3ED0457729354754946D96c07116651e"
+OLD_NFT_MANAGER = "0x9BD490113a249c81D0beA52d677134f5e87C0d60"
+NFT_DESCRIPTOR_LIB = "0x98904715dDd961fb368eF7ea3A419ff1FB664c38"
+TICK_LENS = "0xdB5F2Ca65aAeB277E36be69553E0e7aA3585204d"
+
+# Pool initialization code hashes
+V2_PAIR_INIT_CODE_HASH = "0x60cc0e9ad39c5fa4ee52571f511012ed76fbaa9bbaffd2f3fafffcb3c47cff6e"
+V3_POOL_INIT_CODE_HASH = "0x209015062f691a965df159762a8d966b688e328361c53ec32da2ad31287e3b72"
 
 # Default slippage tolerance and deadline
 DEFAULT_SLIPPAGE = Decimal("0.005")  # 0.5%
