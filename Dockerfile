@@ -7,8 +7,8 @@ RUN npm run build
 
 # Stage 2: Build Backend
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS backend-builder
-ADD . /flare-ai-defai
-WORKDIR /flare-ai-defai
+ADD . /flare-defai
+WORKDIR /flare-defai
 RUN uv sync --frozen
 
 # Stage 3: Final Image
