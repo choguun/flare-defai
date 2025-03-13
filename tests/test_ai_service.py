@@ -1,4 +1,4 @@
-from flare_ai_defai.ai import GeminiProvider
+from flare_defai.ai import GeminiProvider
 
 
 async def test_generate() -> None:

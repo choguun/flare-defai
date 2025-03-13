@@ -1,4 +1,4 @@
-from flare_ai_defai.blockchain import FlareProvider
+from flare_defai.blockchain import FlareProvider
 
 
 def test_generate_account() -> None:

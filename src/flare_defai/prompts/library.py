@@ -20,7 +20,7 @@ Example:
 
 import structlog
 
-from flare_ai_defai.prompts.schemas import (
+from flare_defai.prompts.schemas import (
     Prompt,
     SemanticRouterResponse,
     TokenAddLiquidityResponse,
@@ -28,7 +28,7 @@ from flare_ai_defai.prompts.schemas import (
     TokenSendResponse,
     TokenSwapResponse,
 )
-from flare_ai_defai.prompts.templates import (
+from flare_defai.prompts.templates import (
     ADD_LIQUIDITY,
     CONVERSATIONAL,
     GENERATE_ACCOUNT,

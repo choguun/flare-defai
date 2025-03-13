@@ -16,14 +16,14 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from flare_ai_defai import (
+from flare_defai import (
     ChatRouter,
     FlareProvider,
     GeminiProvider,
     PromptService,
     Vtpm,
 )
-from flare_ai_defai.settings import settings
+from flare_defai.settings import settings
 
 logger = structlog.get_logger(__name__)
 

@@ -1,4 +1,4 @@
-from flare_ai_defai.ai.base import (
+from flare_defai.ai.base import (
     AsyncBaseRouter,
     BaseRouter,
     ChatRequest,

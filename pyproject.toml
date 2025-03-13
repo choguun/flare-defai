@@ -31,7 +31,7 @@ dev = [
 ]
 
 [project.scripts]
-start-backend = "flare_ai_defai.main:start"
+start-backend = "flare_defai.main:start"
 
 [build-system]
 requires = ["hatchling"]
