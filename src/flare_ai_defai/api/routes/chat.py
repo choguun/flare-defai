@@ -22,6 +22,7 @@ from web3.exceptions import Web3RPCError
 from flare_ai_defai.ai import GeminiProvider
 from flare_ai_defai.attestation import Vtpm, VtpmAttestationError
 from flare_ai_defai.blockchain import FlareProvider
+from flare_ai_defai.blockchain.defi import DeFiService
 from flare_ai_defai.prompts import PromptService, SemanticRouterResponse
 from flare_ai_defai.settings import settings
 
@@ -78,6 +79,7 @@ class ChatRouter:
         self.attestation = attestation
         self.prompts = prompts
         self.logger = logger.bind(router="chat")
+        self.defi = DeFiService(self.blockchain.web3)
         self._setup_routes()
 
     def _setup_routes(self) -> None:
@@ -278,17 +280,64 @@ class ChatRouter:
         )
         return {"response": formatted_preview}
 
-    async def handle_swap_token(self, _: str) -> dict[str, str]:
+    async def handle_swap_token(self, message: str) -> dict[str, str]:
         """
-        Handle token swap requests (currently unsupported).
+        Handle token swap requests.
 
         Args:
-            _: Unused message parameter
+            message: Message containing token swap details
 
         Returns:
-            dict[str, str]: Response indicating unsupported operation
+            dict[str, str]: Response containing transaction preview or follow-up prompt
         """
-        return {"response": "Sorry I can't do that right now"}
+
+        if not self.blockchain.address:
+            await self.handle_generate_account(message)
+        
+        prompt, mime_type, schema = self.prompts.get_formatted_prompt(
+            "swap_token", user_input=message
+        )
+        swap_token_response = self.ai.generate(
+            prompt=prompt, response_mime_type=mime_type, response_schema=schema
+        )
+        swap_token_json = json.loads(swap_token_response.text)
+        expected_json_len = 3
+        
+        if (len(swap_token_json) != expected_json_len or
+            swap_token_json.get("amount") == 0.0 or
+            swap_token_json.get("from_token") == swap_token_json.get("to_token")):
+            prompt, _, _ = self.prompts.get_formatted_prompt("follow_up_token_send")
+            follow_up_response = self.ai.generate(prompt)
+            return {"response": follow_up_response.text}
+
+        # Use the DeFiService to create a swap transaction
+        try:
+            # Default to V3 swap but could be configurable
+            tx = self.defi.create_swap_tx(
+                from_token=swap_token_json.get("from_token"),
+                to_token=swap_token_json.get("to_token"),
+                amount=swap_token_json.get("amount"),
+                sender=self.blockchain.address,
+                use_v3=True  # Could be a setting or user preference
+            )
+            
+            self.logger.debug("swap_token_tx", tx=tx)
+            self.blockchain.add_tx_to_queue(msg=message, tx=tx)
+            
+            # Create a formatted preview for the user
+            from_token = swap_token_json.get("from_token")
+            to_token = swap_token_json.get("to_token")
+            amount = swap_token_json.get("amount")
+            
+            formatted_preview = (
+                f"Transaction Preview: Swapping {amount} {from_token} to {to_token}\n"
+                f"Type CONFIRM to proceed."
+            )
+            
+            return {"response": formatted_preview}
+        except Exception as e:
+            self.logger.exception("swap_token_failed", error=str(e))
+            return {"response": f"Failed to create swap transaction: {str(e)}"}
 
     async def handle_attestation(self, _: str) -> dict[str, str]:
         """
