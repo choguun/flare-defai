@@ -25,6 +25,8 @@ from flare_ai_defai.prompts.schemas import (
     SemanticRouterResponse,
     TokenSendResponse,
     TokenSwapResponse,
+    TokenAddLiquidityResponse,
+    TokenRemoveLiquidityResponse,
 )
 from flare_ai_defai.prompts.templates import (
     CONVERSATIONAL,
@@ -34,6 +36,8 @@ from flare_ai_defai.prompts.templates import (
     TOKEN_SEND,
     TOKEN_SWAP,
     TX_CONFIRMATION,
+    ADD_LIQUIDITY,
+    REMOVE_LIQUIDITY,
 )
 
 logger = structlog.get_logger(__name__)
@@ -96,24 +100,6 @@ class PromptLibrary:
                 category="router",
             ),
             Prompt(
-                name="token_send",
-                description="Extract token send parameters from user input",
-                template=TOKEN_SEND,
-                required_inputs=["user_input"],
-                response_mime_type="application/json",
-                response_schema=TokenSendResponse,
-                category="defai",
-            ),
-            Prompt(
-                name="token_swap",
-                description="Extract token swap parameters from user input",
-                template=TOKEN_SWAP,
-                required_inputs=["user_input"],
-                response_schema=TokenSwapResponse,
-                response_mime_type="application/json",
-                category="defai",
-            ),
-            Prompt(
                 name="generate_account",
                 description="Generate a new account for a user",
                 template=GENERATE_ACCOUNT,
@@ -148,6 +134,42 @@ class PromptLibrary:
                 response_schema=None,
                 response_mime_type=None,
                 category="account",
+            ),
+            Prompt(
+                name="token_send",
+                description="Extract token send parameters from user input",
+                template=TOKEN_SEND,
+                required_inputs=["user_input"],
+                response_mime_type="application/json",
+                response_schema=TokenSendResponse,
+                category="defai",
+            ),
+            Prompt(
+                name="token_swap",
+                description="Extract token swap parameters from user input",
+                template=TOKEN_SWAP,
+                required_inputs=["user_input"],
+                response_schema=TokenSwapResponse,
+                response_mime_type="application/json",
+                category="defai",
+            ),
+            Prompt(
+                name="add_liquidity",
+                description="Extract add liquidity parameters from user input",
+                template=ADD_LIQUIDITY,
+                required_inputs=["user_input"],
+                response_schema=TokenAddLiquidityResponse,
+                response_mime_type="application/json",
+                category="defai",
+            ),
+            Prompt(
+                name="remove_liquidity",
+                description="Extract remove liquidity parameters from user input",
+                template=REMOVE_LIQUIDITY,
+                required_inputs=["user_input"],
+                response_schema=TokenRemoveLiquidityResponse,
+                response_mime_type="application/json",
+                category="defai",
             ),
         ]
 

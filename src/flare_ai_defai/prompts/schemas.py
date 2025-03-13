@@ -96,6 +96,26 @@ class TokenAddLiquidityResponse(TypedDict):
     amount_b: float
 
 
+class TokenRemoveLiquidityResponse(TypedDict):
+    """
+    Type definition for liquidity removal operation parameters.
+
+    Defines the required fields for removing liquidity from a pool, including
+    the tokens involved and their respective amounts.
+
+    Attributes:
+        token_a (str): The first token in the pair
+        amount_a (float): The amount of the first token to remove
+        token_b (str): The second token in the pair
+        amount_b (float): The amount of the second token to remove
+    """
+
+    token_a: str
+    amount_a: float
+    token_b: str
+    amount_b: float
+
+
 class PromptInputs(TypedDict, total=False):
     """
     Type definition for various types of prompt inputs.
