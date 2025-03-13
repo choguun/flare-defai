@@ -1,10 +1,11 @@
 [project]
-name = "flare-ai-defai"
+name = "flare-defai"
 version = "0.1.0"
-description = "Flare AI Kit template for AI x DeFi (DeFAI)"
+description = "Flare DeFAI"
 readme = "README.md"
 authors = [
   {name = "Dinesh Pinto", email = "annual.fallout_0z@icloud.com"},
+  {name = "Choguun", email = "visaruth.s@gmail.com"}
 ]
 requires-python = ">=3.12"
 dependencies = [

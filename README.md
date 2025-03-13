@@ -1,6 +1,6 @@
-# Flare AI DeFAI
+# Flare DeFAI
 
-Flare AI Kit template for AI x DeFi (DeFAI).
+
 
 ## 🚀 Key Features
 
