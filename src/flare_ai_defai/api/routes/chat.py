@@ -206,6 +206,7 @@ class ChatRouter:
             SemanticRouterResponse.GENERATE_ACCOUNT: self.handle_generate_account,
             SemanticRouterResponse.SEND_TOKEN: self.handle_send_token,
             SemanticRouterResponse.SWAP_TOKEN: self.handle_swap_token,
+            SemanticRouterResponse.ADD_LIQUIDITY: self.handle_add_liquidity,
             SemanticRouterResponse.REQUEST_ATTESTATION: self.handle_attestation,
             SemanticRouterResponse.CONVERSATIONAL: self.handle_conversation,
         }
@@ -338,6 +339,68 @@ class ChatRouter:
         except Exception as e:
             self.logger.exception("swap_token_failed", error=str(e))
             return {"response": f"Failed to create swap transaction: {str(e)}"}
+
+    async def handle_add_liquidity(self, message: str) -> dict[str, str]:
+        """
+        Handle add liquidity requests.
+
+        Args:
+            message: Message containing add liquidity details
+
+        Returns:
+            dict[str, str]: Response containing transaction preview or follow-up prompt
+        """
+        if not self.blockchain.address:
+            await self.handle_generate_account(message)
+        
+        prompt, mime_type, schema = self.prompts.get_formatted_prompt(
+            "add_liquidity", user_input=message
+        )
+        add_liquidity_response = self.ai.generate(
+            prompt=prompt, response_mime_type=mime_type, response_schema=schema
+        )
+        add_liquidity_json = json.loads(add_liquidity_response.text)
+        expected_json_len = 4
+        
+        # Validate the response
+        if (len(add_liquidity_json) != expected_json_len or
+            add_liquidity_json.get("amount_a") == 0.0 or
+            add_liquidity_json.get("amount_b") == 0.0 or
+            add_liquidity_json.get("token_a") == add_liquidity_json.get("token_b")):
+            prompt, _, _ = self.prompts.get_formatted_prompt("follow_up_token_send")
+            follow_up_response = self.ai.generate(prompt)
+            return {"response": follow_up_response.text}
+
+        # Use the DeFiService to create an add liquidity transaction
+        try:
+            # Default to V3 liquidity but could be configurable
+            tx = self.defi.create_add_liquidity_tx(
+                token_a=add_liquidity_json.get("token_a"),
+                token_b=add_liquidity_json.get("token_b"),
+                amount_a=add_liquidity_json.get("amount_a"),
+                amount_b=add_liquidity_json.get("amount_b"),
+                sender=self.blockchain.address,
+                use_v3=True  # Could be a setting or user preference
+            )
+            
+            self.logger.debug("add_liquidity_tx", tx=tx)
+            self.blockchain.add_tx_to_queue(msg=message, tx=tx)
+            
+            # Create a formatted preview for the user
+            token_a = add_liquidity_json.get("token_a")
+            token_b = add_liquidity_json.get("token_b")
+            amount_a = add_liquidity_json.get("amount_a")
+            amount_b = add_liquidity_json.get("amount_b")
+            
+            formatted_preview = (
+                f"Transaction Preview: Adding liquidity with {amount_a} {token_a} and {amount_b} {token_b}\n"
+                f"Type CONFIRM to proceed."
+            )
+            
+            return {"response": formatted_preview}
+        except Exception as e:
+            self.logger.exception("add_liquidity_failed", error=str(e))
+            return {"response": f"Failed to create add liquidity transaction: {str(e)}"}
 
     async def handle_attestation(self, _: str) -> dict[str, str]:
         """
