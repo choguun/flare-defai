@@ -23,21 +23,21 @@ import structlog
 from flare_ai_defai.prompts.schemas import (
     Prompt,
     SemanticRouterResponse,
-    TokenSendResponse,
-    TokenSwapResponse,
     TokenAddLiquidityResponse,
     TokenRemoveLiquidityResponse,
+    TokenSendResponse,
+    TokenSwapResponse,
 )
 from flare_ai_defai.prompts.templates import (
+    ADD_LIQUIDITY,
     CONVERSATIONAL,
     GENERATE_ACCOUNT,
     REMOTE_ATTESTATION,
+    REMOVE_LIQUIDITY,
     SEMANTIC_ROUTER,
     TOKEN_SEND,
     TOKEN_SWAP,
     TX_CONFIRMATION,
-    ADD_LIQUIDITY,
-    REMOVE_LIQUIDITY,
 )
 
 logger = structlog.get_logger(__name__)

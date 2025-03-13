@@ -294,7 +294,7 @@ class ChatRouter:
 
         if not self.blockchain.address:
             await self.handle_generate_account(message)
-        
+
         prompt, mime_type, schema = self.prompts.get_formatted_prompt(
             "swap_token", user_input=message
         )
@@ -303,10 +303,12 @@ class ChatRouter:
         )
         swap_token_json = json.loads(swap_token_response.text)
         expected_json_len = 3
-        
-        if (len(swap_token_json) != expected_json_len or
-            swap_token_json.get("amount") == 0.0 or
-            swap_token_json.get("from_token") == swap_token_json.get("to_token")):
+
+        if (
+            len(swap_token_json) != expected_json_len
+            or swap_token_json.get("amount") == 0.0
+            or swap_token_json.get("from_token") == swap_token_json.get("to_token")
+        ):
             prompt, _, _ = self.prompts.get_formatted_prompt("follow_up_token_send")
             follow_up_response = self.ai.generate(prompt)
             return {"response": follow_up_response.text}
@@ -319,26 +321,26 @@ class ChatRouter:
                 to_token=swap_token_json.get("to_token"),
                 amount=swap_token_json.get("amount"),
                 sender=self.blockchain.address,
-                use_v3=True  # Could be a setting or user preference
+                use_v3=True,  # Could be a setting or user preference
             )
-            
+
             self.logger.debug("swap_token_tx", tx=tx)
             self.blockchain.add_tx_to_queue(msg=message, tx=tx)
-            
+
             # Create a formatted preview for the user
             from_token = swap_token_json.get("from_token")
             to_token = swap_token_json.get("to_token")
             amount = swap_token_json.get("amount")
-            
+
             formatted_preview = (
                 f"Transaction Preview: Swapping {amount} {from_token} to {to_token}\n"
                 f"Type CONFIRM to proceed."
             )
-            
+
             return {"response": formatted_preview}
         except Exception as e:
             self.logger.exception("swap_token_failed", error=str(e))
-            return {"response": f"Failed to create swap transaction: {str(e)}"}
+            return {"response": f"Failed to create swap transaction: {e!s}"}
 
     async def handle_add_liquidity(self, message: str) -> dict[str, str]:
         """
@@ -352,7 +354,7 @@ class ChatRouter:
         """
         if not self.blockchain.address:
             await self.handle_generate_account(message)
-        
+
         prompt, mime_type, schema = self.prompts.get_formatted_prompt(
             "add_liquidity", user_input=message
         )
@@ -361,12 +363,14 @@ class ChatRouter:
         )
         add_liquidity_json = json.loads(add_liquidity_response.text)
         expected_json_len = 4
-        
+
         # Validate the response
-        if (len(add_liquidity_json) != expected_json_len or
-            add_liquidity_json.get("amount_a") == 0.0 or
-            add_liquidity_json.get("amount_b") == 0.0 or
-            add_liquidity_json.get("token_a") == add_liquidity_json.get("token_b")):
+        if (
+            len(add_liquidity_json) != expected_json_len
+            or add_liquidity_json.get("amount_a") == 0.0
+            or add_liquidity_json.get("amount_b") == 0.0
+            or add_liquidity_json.get("token_a") == add_liquidity_json.get("token_b")
+        ):
             prompt, _, _ = self.prompts.get_formatted_prompt("follow_up_token_send")
             follow_up_response = self.ai.generate(prompt)
             return {"response": follow_up_response.text}
@@ -380,27 +384,27 @@ class ChatRouter:
                 amount_a=add_liquidity_json.get("amount_a"),
                 amount_b=add_liquidity_json.get("amount_b"),
                 sender=self.blockchain.address,
-                use_v3=True  # Could be a setting or user preference
+                use_v3=True,  # Could be a setting or user preference
             )
-            
+
             self.logger.debug("add_liquidity_tx", tx=tx)
             self.blockchain.add_tx_to_queue(msg=message, tx=tx)
-            
+
             # Create a formatted preview for the user
             token_a = add_liquidity_json.get("token_a")
             token_b = add_liquidity_json.get("token_b")
             amount_a = add_liquidity_json.get("amount_a")
             amount_b = add_liquidity_json.get("amount_b")
-            
+
             formatted_preview = (
                 f"Transaction Preview: Adding liquidity with {amount_a} {token_a} and {amount_b} {token_b}\n"
                 f"Type CONFIRM to proceed."
             )
-            
+
             return {"response": formatted_preview}
         except Exception as e:
             self.logger.exception("add_liquidity_failed", error=str(e))
-            return {"response": f"Failed to create add liquidity transaction: {str(e)}"}
+            return {"response": f"Failed to create add liquidity transaction: {e!s}"}
 
     async def handle_attestation(self, _: str) -> dict[str, str]:
         """
