@@ -6,27 +6,36 @@ RUN npm install
 RUN npm run build
 
 # Stage 2: Build Backend
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS backend-builder
-ADD . /flare-defai
+FROM python:3.12-slim AS backend-builder
 WORKDIR /flare-defai
 
-# Install dependencies with pip instead of uv sync to avoid the hatchling error
-RUN python -m uv venv .venv && \
-    . ./.venv/bin/activate && \
-    python -m uv pip install -r <(python -c "import tomli; print('\n'.join('{}=={}'.format(d.get('name', n), d.get('version', '*')) for n, d in tomli.load(open('pyproject.toml', 'rb'))['project'].get('dependencies', {}).items()))")
+# Copy requirements first for better caching
+COPY pyproject.toml ./
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc python3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install dependencies directly, skip the editable install that's causing problems
+RUN pip install --upgrade pip && \
+    pip install -e .
+
+# Copy application code
+COPY src/ ./src/
 
 # Stage 3: Final Image
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+FROM python:3.12-slim
 
 # Install nginx
 RUN apt-get update && apt-get install -y nginx supervisor curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=backend-builder /flare-defai/.venv ./.venv
+COPY --from=backend-builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
 COPY --from=backend-builder /flare-defai/src ./src
 COPY --from=backend-builder /flare-defai/pyproject.toml .
-COPY --from=backend-builder /flare-defai/README.md .
+COPY README.md .
 
 # Copy frontend files
 COPY --from=frontend-builder /frontend/build /usr/share/nginx/html
