@@ -9,7 +9,8 @@ RUN npm run build
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS backend-builder
 ADD . /flare-defai
 WORKDIR /flare-defai
-RUN uv sync --frozen
+RUN uv venv .venv && \
+    uv pip install -e . --config-setting editable_mode=compat
 
 # Stage 3: Final Image
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
