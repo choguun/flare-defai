@@ -9,17 +9,19 @@ RUN npm run build
 FROM python:3.12-slim AS backend-builder
 WORKDIR /flare-defai
 
-# Copy requirements first for better caching
-COPY pyproject.toml ./
+# Copy requirements and configuration files for better caching
+COPY pyproject.toml README.md ./
 
 # Install build dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc python3-dev && \
+    apt-get install -y --no-install-recommends gcc python3-dev git && \
     rm -rf /var/lib/apt/lists/*
 
-# Install dependencies directly, skip the editable install that's causing problems
+# Install dependencies directly without using -e flag
 RUN pip install --upgrade pip && \
-    pip install -e .
+    pip install hatchling && \
+    pip install build && \
+    pip install aiohttp pydantic-settings requests structlog google-generativeai httpx cryptography pyjwt pyopenssl fastapi uvicorn web3
 
 # Copy application code
 COPY src/ ./src/
@@ -35,7 +37,7 @@ WORKDIR /app
 COPY --from=backend-builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
 COPY --from=backend-builder /flare-defai/src ./src
 COPY --from=backend-builder /flare-defai/pyproject.toml .
-COPY README.md .
+COPY --from=backend-builder /flare-defai/README.md .
 
 # Copy frontend files
 COPY --from=frontend-builder /frontend/build /usr/share/nginx/html
@@ -45,6 +47,9 @@ COPY nginx.conf /etc/nginx/sites-enabled/default
 
 # Setup supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Add PYTHONPATH to ensure modules are found
+ENV PYTHONPATH=/app
 
 # Allow workload operator to override environment variables
 LABEL "tee.launch_policy.allow_env_override"="GEMINI_API_KEY,GEMINI_MODEL,WEB3_PROVIDER_URL,WEB3_EXPLORER_URL,SIMULATE_ATTESTATION"
