@@ -79,7 +79,7 @@ class ChatRouter:
         self.attestation = attestation
         self.prompts = prompts
         self.logger = logger.bind(router="chat")
-        self.defi = DeFiService(self.blockchain.web3)
+        self.defi = DeFiService(self.blockchain.w3)
         self._setup_routes()
 
     def _setup_routes(self) -> None:
