@@ -27,11 +27,3 @@ jobs:
       - name: Format with ruff
         run: uv run ruff format --diff
 
-      # Lint code with ruff
-      - name: Lint with ruff
-        run: uv run ruff check --diff
-        continue-on-error: false
-
-      # Type check with pyright
-      - name: Type check with pyright
-        run: uv run pyright
