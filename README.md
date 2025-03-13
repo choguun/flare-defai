@@ -13,8 +13,17 @@
 - **Flare Blockchain and Wallet Integration**  
   Perform token operations and generate wallets from within the TEE.
 
+- **SparkDEX Integration**  
+  Native integration with SparkDEX (V2 & V3.1) on Flare Network, supporting token swaps and liquidity operations via natural language commands.
+
+- **Secure Transaction Handling & Validation**  
+  TEE-secured transaction validation with AI-enhanced security checks, preventing common attacks and scams. Transactions are simulated before execution to predict outcomes and identify potential issues.
+
+- **Comprehensive Smart Contract Risk Assessment**  
+  Advanced risk analysis for smart contract interactions leveraging Gemini AI within TEE, identifying security vulnerabilities, malicious patterns, and suggesting mitigations.
+
 - **Gemini 2.0 + over 300 LLMs supported**  
-  Utilize Google Gemini’s latest model with structured query support for advanced AI functionalities.
+  Utilize Google Gemini's latest model with structured query support for advanced AI functionalities.
 
 <img width="500" alt="Artemis" src="https://github.com/user-attachments/assets/921fbfe2-9d52-496c-9b48-9dfc32a86208" />
 
@@ -35,7 +44,7 @@ The Docker setup mimics a TEE environment and includes an Nginx server for routi
 1. **Build the Docker Image:**
 
    ```bash
-   docker build -t flare-ai-defai .
+   docker build -t flare-defai .
    ```
 
 2. **Run the Docker Container:**
@@ -237,6 +246,18 @@ Once your instance is running, access the Chat UI using its public IP address. H
 - **"Create an account for me"**
 - **"Transfer 10 C2FLR to 0x000000000000000000000000000000000000dEaD"**
 - **"Show me your remote attestation"**
+- **"Swap 0.1 WFLR for USDC on SparkDEX"**
+- **"Add liquidity to WFLR-USDC pool on SparkDEX V3"**
+- **"Analyze risk for contract 0x4a1E5A90e9943467FAd1acea1E7F0e5e88472a1e"**
+- **"Is this transaction safe?"** (when presented with a transaction)
+
+### Flare Ecosystem Support
+
+The application integrates with the following Flare ecosystem applications:
+
+- **SparkDEX:** Fully implemented with support for V2 & V3.1 token swaps and liquidity operations
+  - Verify contracts on [FlareScan](https://flarescan.com/address/0x4a1E5A90e9943467FAd1acea1E7F0e5e88472a1e)
+  - Documentation: [SparkDEX Docs](https://docs.sparkdex.ai/)
 
 ### Future Upgrades
 
@@ -244,9 +265,9 @@ Once your instance is running, access the Chat UI using its public IP address. H
   Implement RA-TLS for encrypted communication.
 
 - **Expanded Flare Ecosystem Support:**
-  - **Token Swaps:** via [SparkDEX](http://sparkdex.ai)
   - **Borrow-Lend:** via [Kinetic](https://linktr.ee/kinetic.market)
   - **Trading Strategies:** via [RainDEX](https://www.rainlang.xyz)
+  - **Decentralized Reserve:** via [Cyclo](https://www.cyclo.network/)
 
 ### Example Use Cases & Project Ideas
 
@@ -289,3 +310,33 @@ Connect the DeFAI agent with the RAG from [`flare-ai-rag`](https://github.com/fl
 ### Transaction simulation
 
 Use a transaction simulation framework such as [Tenderly Simulator](https://tenderly.co/transaction-simulator) to show users the expected outcome of their transaction.
+
+### Security Features
+
+The application includes robust security features to protect users when interacting with the Flare blockchain:
+
+#### Secure Transaction Validation
+
+- **Pre-execution Validation**: All transactions are validated before execution to detect common issues
+- **AI-Enhanced Security Checks**: Gemini AI analyzes transactions for potential scams or malicious patterns
+- **Transaction Simulation**: Executes a dry-run of transactions to predict outcomes without risking funds
+- **Risk Scoring**: Assigns clear risk levels (Safe, Low, Medium, High, Critical) to every transaction
+- **Human-Readable Recommendations**: Provides understandable explanations of risks and suggested actions
+
+#### Comprehensive Smart Contract Risk Assessment
+
+- **Bytecode Analysis**: Identifies dangerous functions and potential vulnerabilities in contract code
+- **Source Code Verification**: Verifies contract source code when available on block explorers
+- **AI-Powered Risk Detection**: Uses Gemini AI to detect complex security issues and patterns
+- **Security Categories**: Organizes findings by risk category (Implementation, Access Control, Upgradeable, etc.)
+- **Detailed Reports**: Generates comprehensive risk reports with specific findings and recommendations
+
+All security features operate within the TEE (Trusted Execution Environment), ensuring that sensitive analysis operations and AI interactions remain protected by hardware-level security.
+
+### API Endpoints for Security Features
+
+The application exposes several API endpoints for security features:
+
+- **POST /api/routes/transaction/validate**: Validates a transaction for security issues
+- **POST /api/routes/transaction/analyze-contract**: Performs security analysis on a smart contract
+- **POST /api/routes/transaction/assess-transaction-contract**: Assesses the risk of interacting with a specific contract
