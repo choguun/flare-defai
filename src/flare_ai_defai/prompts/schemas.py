@@ -29,6 +29,7 @@ class SemanticRouterResponse(str, Enum):
         GENERATE_ACCOUNT: Route to account generation workflow
         SEND_TOKEN: Route to token sending workflow
         SWAP_TOKEN: Route to token swapping workflow
+        ADD_LIQUIDITY: Route to liquidity provision workflow
         REQUEST_ATTESTATION: Route to attestation request handling
         CONVERSATIONAL: Route to general conversational response
     """
@@ -36,6 +37,7 @@ class SemanticRouterResponse(str, Enum):
     GENERATE_ACCOUNT = "GenerateAccount"
     SEND_TOKEN = "SendToken"
     SWAP_TOKEN = "SwapToken"
+    ADD_LIQUIDITY = "AddLiquidity"
     REQUEST_ATTESTATION = "RequestAttestation"
     CONVERSATIONAL = "Conversational"
 
@@ -72,6 +74,26 @@ class TokenSwapResponse(TypedDict):
     from_token: str
     to_token: str
     amount: float
+
+
+class TokenAddLiquidityResponse(TypedDict):
+    """
+    Type definition for liquidity provision operation parameters.
+
+    Defines the required fields for adding liquidity to a pool, including
+    the tokens involved and their respective amounts.
+
+    Attributes:
+        token_a (str): The first token in the pair
+        amount_a (float): The amount of the first token to add
+        token_b (str): The second token in the pair
+        amount_b (float): The amount of the second token to add
+    """
+
+    token_a: str
+    amount_a: float
+    token_b: str
+    amount_b: float
 
 
 class PromptInputs(TypedDict, total=False):
