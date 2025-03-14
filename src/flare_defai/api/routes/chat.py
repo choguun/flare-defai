@@ -109,28 +109,58 @@ class ChatRouter:
                     return await self.handle_command(message.message)
                 if (
                     self.blockchain.tx_queue
-                    and message.message == self.blockchain.tx_queue[-1].msg
+                    and message.message.lower() in ["confirm", "confirmed"]
                 ):
+                    # Process all transactions in the queue one by one
+                    tx_hashes = []
+                    tx_count = len(self.blockchain.tx_queue)
+                    
                     try:
-                        tx_hash = self.blockchain.send_tx_in_queue()
+                        # For multi-transaction flows like swaps, we need to process all 
+                        # transactions in the queue in sequence
+                        for i in range(tx_count):
+                            if not self.blockchain.tx_queue:
+                                break  # Queue might be empty if errors occurred
+                                
+                            # Get transaction description before sending
+                            tx_description = self.blockchain.tx_queue[0].msg
+                            self.logger.info(f"Processing transaction {i+1}/{tx_count}: {tx_description}")
+                            
+                            # Send the transaction and get the hash
+                            tx_hash = self.blockchain.send_tx_in_queue()
+                            tx_hashes.append(tx_hash)
+                            
                     except Web3RPCError as e:
                         self.logger.exception("send_tx_failed", error=str(e))
                         msg = (
-                            f"Unfortunately the tx failed with the error:\n{e.args[0]}"
+                            f"Unfortunately the transaction failed with the error:\n{e.args[0]}"
                         )
                         return {"response": msg}
-
-                    prompt, mime_type, schema = self.prompts.get_formatted_prompt(
-                        "tx_confirmation",
-                        tx_hash=tx_hash,
-                        block_explorer="https://flare-explorer.flare.network/",
-                    )
-                    tx_confirmation_response = self.ai.generate(
-                        prompt=prompt,
-                        response_mime_type=mime_type,
-                        response_schema=schema,
-                    )
-                    return {"response": tx_confirmation_response.text}
+                    
+                    # If we have transaction hashes, confirm the last one (or the only one)
+                    if tx_hashes:
+                        prompt, mime_type, schema = self.prompts.get_formatted_prompt(
+                            "tx_confirmation",
+                            tx_hash=tx_hashes[-1],  # Use the last transaction hash
+                            block_explorer="https://flare-explorer.flare.network/",
+                        )
+                        tx_confirmation_response = self.ai.generate(
+                            prompt=prompt,
+                            response_mime_type=mime_type,
+                            response_schema=schema,
+                        )
+                        
+                        # For multi-transaction flows, include all tx hashes
+                        if len(tx_hashes) > 1:
+                            hashes_text = "\n".join([
+                                f"Transaction {i+1}: {hash}" 
+                                for i, hash in enumerate(tx_hashes)
+                            ])
+                            return {"response": f"{tx_confirmation_response.text}\n\nAll transactions completed successfully:\n{hashes_text}"}
+                        else:
+                            return {"response": tx_confirmation_response.text}
+                    else:
+                        return {"response": "No transactions were processed. Please try again."}
                 if self.attestation.attestation_requested:
                     try:
                         resp = self.attestation.get_token([message.message])
@@ -453,31 +483,72 @@ class ChatRouter:
             to_token = swap_token_json.get("to_token")
             amount = swap_token_json.get("amount")
             
+            # Clear any existing transactions in the queue to avoid duplicates
+            self.blockchain.tx_queue.clear()
+            
             # Default to V3 swap but could be configurable
-            swap_tx, approval_tx = self.defi.create_swap_tx(
+            transactions = self.defi.create_swap_tx(
                 from_token=from_token,
                 to_token=to_token,
                 amount=amount,
                 sender=self.blockchain.address,
-                use_v3=True,  # Could be a setting or user preference
             )
 
-            # Handle approval if needed
-            if approval_tx:
+            # Check if we got transactions back
+            if not transactions:
+                self.logger.error("swap_token_no_transactions")
+                return {"response": f"Unable to create swap transaction for {amount} {from_token} to {to_token}."}
+                
+            # Handle special case for FLR->any token which returns 3 transactions: [wrap_tx, approve_tx, swap_tx]
+            is_flr_wrap_flow = from_token.upper() == "FLR" and len(transactions) == 3
+            
+            if is_flr_wrap_flow:
+                # For FLR source with wrapping: [wrap_tx, approve_tx, swap_tx]
+                wrap_tx = transactions[0]
+                approve_tx = transactions[1]
+                swap_tx = transactions[2]
+                
+                # First, queue the wrap transaction
+                self.logger.debug("wrap_flr_to_wflr", wrap_tx=wrap_tx)
+                self.blockchain.add_tx_to_queue(msg=f"Wrap {amount} FLR to WFLR", tx=wrap_tx)
+                
+                # Then queue the approval (will be executed after wrap)
+                self.logger.debug("approve_wflr_for_swap", approve_tx=approve_tx)
+                self.blockchain.add_tx_to_queue(msg=f"Approve WFLR for swap", tx=approve_tx)
+                
+                # Finally, queue the swap
+                self.logger.debug("swap_wflr_to_token", swap_tx=swap_tx)
+                self.blockchain.add_tx_to_queue(msg=f"Swap WFLR to {to_token}", tx=swap_tx)
+                
+                return {"response": f"I've prepared the complete swap from {amount} {from_token} to {to_token}. This requires three steps: wrapping FLR to WFLR, approving WFLR for the router, and executing the swap. Type CONFIRM to proceed with these transactions."}
+            elif len(transactions) == 2:
+                # For non-FLR source with approval: [approval_tx, swap_tx]
+                approval_tx = transactions[0]
+                swap_tx = transactions[1]
+                
+                # Handle approval if needed
                 self.logger.debug("swap_token_approval_needed", approval_tx=approval_tx)
                 self.blockchain.add_tx_to_queue(msg=f"Approve {from_token} for swap", tx=approval_tx)
-                return {"response": f"You need to approve {from_token} for trading first. Type CONFIRM to proceed with the approval transaction."}
-
-            self.logger.debug("swap_token_tx", tx=swap_tx)
-            self.blockchain.add_tx_to_queue(msg=message, tx=swap_tx)
-
-            # Create a formatted preview for the user
-            formatted_preview = (
-                f"Transaction Preview: Swapping {amount} {from_token} to {to_token}\n"
-                f"Type CONFIRM to proceed."
-            )
-
-            return {"response": formatted_preview}
+                
+                # Queue the swap transaction (will be executed after approval)
+                self.logger.debug("swap_token_tx", tx=swap_tx)
+                self.blockchain.add_tx_to_queue(msg=f"Swap {amount} {from_token} to {to_token}", tx=swap_tx)
+                
+                return {"response": f"You need to approve {from_token} for trading first, then we'll swap {amount} {from_token} to {to_token}. Type CONFIRM to proceed with both transactions."}
+            elif len(transactions) == 1:
+                # For tokens that don't need approval: [swap_tx]
+                swap_tx = transactions[0]
+                
+                # Process the swap transaction
+                self.logger.debug("swap_token_tx", tx=swap_tx)
+                self.blockchain.add_tx_to_queue(msg=f"Swap {amount} {from_token} to {to_token}", tx=swap_tx)
+                
+                return {"response": f"I'll swap {amount} {from_token} to {to_token}. Type CONFIRM to proceed with the swap transaction."}
+            else:
+                # Unexpected number of transactions
+                self.logger.error("swap_token_unexpected_tx_count", count=len(transactions))
+                return {"response": f"Unable to create swap transaction for {amount} {from_token} to {to_token} (unexpected transaction format)."}
+                
         except Exception as e:
             self.logger.exception("swap_token_failed", error=str(e))
             return {"response": f"Failed to create swap transaction: {e!s}"}

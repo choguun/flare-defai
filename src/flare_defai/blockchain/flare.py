@@ -90,7 +90,7 @@ class FlareProvider:
 
     def send_tx_in_queue(self) -> str:
         """
-        Send the most recent transaction in the queue.
+        Send the first transaction in the queue.
 
         Returns:
             str: Transaction hash of the sent transaction
@@ -98,13 +98,24 @@ class FlareProvider:
         Raises:
             ValueError: If no transaction is found in the queue
         """
-        if self.tx_queue:
-            tx_hash = self.sign_and_send_transaction(self.tx_queue[-1].tx)
+        if not self.tx_queue:
+            msg = "No transactions in queue"
+            raise ValueError(msg)
+            
+        # Get the first transaction in the queue (FIFO)
+        tx = self.tx_queue[0].tx
+        
+        try:
+            tx_hash = self.sign_and_send_transaction(tx)
             self.logger.debug("sent_tx_hash", tx_hash=tx_hash)
-            self.tx_queue.pop()
+            # Remove the transaction from the queue only if it was sent successfully
+            self.tx_queue.pop(0)
             return tx_hash
-        msg = "Unable to find confirmed tx"
-        raise ValueError(msg)
+        except Exception as e:
+            self.logger.error("failed_to_send_transaction", error=str(e), tx=tx)
+            # In case of failure, remove the transaction to avoid repeated attempts
+            self.tx_queue.pop(0)
+            raise
 
     def generate_account(self) -> ChecksumAddress:
         """

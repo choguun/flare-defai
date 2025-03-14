@@ -189,6 +189,140 @@ UNISWAP_V3_NFT_MANAGER_ABI = json.loads("""
 ]
 """)
 
+# ABI for Wrapped FLR (WFLR)
+WFLR_ABI = json.loads("""
+[
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "name",
+    "outputs": [{"name": "", "type": "string"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "guy", "type": "address"}, {"name": "wad", "type": "uint256"}],
+    "name": "approve",
+    "outputs": [{"name": "", "type": "bool"}],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "totalSupply",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "src", "type": "address"}, {"name": "dst", "type": "address"}, {"name": "wad", "type": "uint256"}],
+    "name": "transferFrom",
+    "outputs": [{"name": "", "type": "bool"}],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "wad", "type": "uint256"}],
+    "name": "withdraw",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "decimals",
+    "outputs": [{"name": "", "type": "uint8"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "account", "type": "address"}],
+    "name": "balanceOf",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "symbol",
+    "outputs": [{"name": "", "type": "string"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "dst", "type": "address"}, {"name": "wad", "type": "uint256"}],
+    "name": "transfer",
+    "outputs": [{"name": "", "type": "bool"}],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [],
+    "name": "deposit",
+    "outputs": [],
+    "payable": true,
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "owner", "type": "address"}, {"name": "spender", "type": "address"}],
+    "name": "allowance",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "payable": true,
+    "stateMutability": "payable",
+    "type": "fallback"
+  },
+  {
+    "anonymous": false,
+    "inputs": [{"indexed": true, "name": "src", "type": "address"}, {"indexed": true, "name": "guy", "type": "address"}, {"indexed": false, "name": "wad", "type": "uint256"}],
+    "name": "Approval",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [{"indexed": true, "name": "src", "type": "address"}, {"indexed": true, "name": "dst", "type": "address"}, {"indexed": false, "name": "wad", "type": "uint256"}],
+    "name": "Transfer",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [{"indexed": true, "name": "dst", "type": "address"}, {"indexed": false, "name": "wad", "type": "uint256"}],
+    "name": "Deposit",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [{"indexed": true, "name": "src", "type": "address"}, {"indexed": false, "name": "wad", "type": "uint256"}],
+    "name": "Withdrawal",
+    "type": "event"
+  }
+]
+""")
+
 ERC20_ABI = json.loads("""
 [
   {
@@ -291,6 +425,15 @@ class DeFiService:
         """Get a contract instance for an ERC20 token."""
         return self.web3.eth.contract(
             address=self.web3.to_checksum_address(token_address), abi=ERC20_ABI
+        )
+
+    def _get_wflr_contract(self) -> Contract:
+        """Get a contract instance for the WFLR token with the proper ABI including deposit()."""
+        wflr_address = self.token_addresses.get("WFLR")
+        if not wflr_address:
+            raise ValueError("WFLR token address not found")
+        return self.web3.eth.contract(
+            address=self.web3.to_checksum_address(wflr_address), abi=WFLR_ABI
         )
 
     def _get_eip1559_tx_params(self) -> dict[str, Any]:
@@ -443,9 +586,17 @@ class DeFiService:
         sender: str,
         fee_tier: int = 3000,  # 0.3% fee tier
         slippage: Decimal = DEFAULT_SLIPPAGE,
-    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        include_wflr_steps: bool = True,  # Whether to include wrap and approve steps for FLR
+    ) -> list[dict[str, Any]]:
         """
-        Create transaction for swapping tokens using Uniswap V3.
+        Create transaction(s) for swapping tokens using Uniswap V3.
+        
+        For FLR to token swaps, this method now includes:
+        1. Transaction to wrap FLR to WFLR
+        2. Transaction to approve WFLR for router
+        3. Transaction to swap WFLR to destination token
+        
+        All necessary transactions are returned in the correct sequence.
 
         Args:
             from_token: Symbol of the token to swap from
@@ -454,9 +605,12 @@ class DeFiService:
             sender: Address of the sender
             fee_tier: Fee tier (500, 3000, 10000)
             slippage: Maximum acceptable slippage
+            include_wflr_steps: Whether to include wrap and approve steps for FLR
 
         Returns:
-            Tuple of (swap transaction, approval transaction if needed)
+            List of transaction dictionaries in execution order.
+            For non-FLR source tokens: [approval_tx (if needed), swap_tx]
+            For FLR source tokens: [wrap_tx, approve_tx, swap_tx]
         """
         self.logger.info(
             "creating_v3_swap",
@@ -467,14 +621,19 @@ class DeFiService:
             fee_tier=fee_tier,
         )
 
+        # Prepare return list
+        transactions = []
+        
         # Get token addresses
-        from_token_address = self.token_addresses.get(from_token.upper())
+        is_flr_source = from_token.upper() == "FLR"
+        wflr_address = self.token_addresses.get("WFLR")
         to_token_address = self.token_addresses.get(to_token.upper())
 
-        if not from_token_address or not to_token_address:
-            raise ValueError(
-                f"Unknown token: {from_token if not from_token_address else to_token}"
-            )
+        if not to_token_address:
+            raise ValueError(f"Unknown token: {to_token}")
+        
+        if is_flr_source and not wflr_address:
+            raise ValueError("WFLR token address not found")
 
         # Convert amount to wei
         amount_in_wei = self.web3.to_wei(amount, "ether")
@@ -485,7 +644,86 @@ class DeFiService:
 
         # Set deadline
         deadline = self.web3.eth.get_block("latest").timestamp + DEFAULT_DEADLINE
+        
+        # Get initial nonce
+        nonce = self.web3.eth.get_transaction_count(sender)
+        
+        # For FLR source, add wrapping and approval steps
+        if is_flr_source and include_wflr_steps:
+            # 1. Add transaction to wrap FLR to WFLR
+            wflr_contract = self._get_wflr_contract()
+            
+            # Log details about the WFLR contract
+            self.logger.info(
+                "wrapping_flr_to_wflr",
+                wflr_address=wflr_address,
+                amount=amount,
+                functions_available=str(wflr_contract.functions)
+            )
+            
+            # Create deposit transaction data
+            deposit_data = wflr_contract.functions.deposit().build_transaction({
+                "gas": 0, 
+                "gasPrice": 0, 
+                "nonce": 0
+            })["data"]
+            
+            wrap_tx = {
+                "from": sender,
+                "to": wflr_address,
+                "value": amount_in_wei,
+                "data": deposit_data,
+                "gas": 200000,  # Gas limit for deposit
+                "nonce": nonce,
+                "gasPrice": self.web3.eth.gas_price,  # Use legacy gas pricing for Flare
+                "chainId": self.web3.eth.chain_id
+            }
+            transactions.append(wrap_tx)
+            nonce += 1
+            
+            # 2. Add transaction to approve WFLR for router
+            approve_data = wflr_contract.functions.approve(
+                self.v3_router.address, 
+                amount_in_wei
+            ).build_transaction({
+                "gas": 0, 
+                "gasPrice": 0, 
+                "nonce": 0
+            })["data"]
+            
+            approve_tx = {
+                "from": sender,
+                "to": wflr_address,
+                "value": 0,
+                "data": approve_data,
+                "gas": 200000,  # Gas limit for approve
+                "nonce": nonce,
+                "gasPrice": self.web3.eth.gas_price,
+                "chainId": self.web3.eth.chain_id
+            }
+            transactions.append(approve_tx)
+            nonce += 1
+            
+            # Use WFLR as the source token for the swap
+            from_token_address = wflr_address
+        else:
+            # For non-FLR token sources
+            from_token_address = self.token_addresses.get(from_token.upper())
+            if not from_token_address:
+                raise ValueError(f"Unknown token: {from_token}")
+                
+            # Add approval transaction if needed and not a FLR source
+            if not is_flr_source:
+                approval_tx = self._approve_token_if_needed(
+                    from_token_address, self.v3_router.address, amount_in_wei, sender
+                )
+                if approval_tx:
+                    # Update the nonce and add to transactions
+                    approval_tx["nonce"] = nonce
+                    transactions.append(approval_tx)
+                    nonce += 1
 
+        # 3. Create swap transaction (for all cases)
         # Create params for exactInputSingle
         params = {
             "tokenIn": from_token_address,
@@ -494,29 +732,36 @@ class DeFiService:
             "recipient": sender,
             "deadline": deadline,
             "amountIn": amount_in_wei,
-            "amountOutMinimum": amount_out_min,
+            "amountOutMinimum": 0,
             "sqrtPriceLimitX96": 0,  # No price limit
         }
 
         # Create swap transaction
+        swap_data = self.v3_router.functions.exactInputSingle(params).build_transaction({
+            "gas": 0, 
+            "gasPrice": 0, 
+            "nonce": 0
+        })["data"]
+        
         swap_tx = {
             "from": sender,
             "to": self.v3_router.address,
-            "gas": 300000,  # Estimate gas in production
-            "nonce": self.web3.eth.get_transaction_count(sender),
-            "value": amount_in_wei if from_token.upper() == "FLR" else 0,
-            "data": self.v3_router.functions.exactInputSingle(params).build_transaction({"gas": 0, "gasPrice": 0, "nonce": 0})["data"],
-            **self._get_eip1559_tx_params()
+            "gas": 1000000,  # Higher gas limit for swap
+            "nonce": nonce,
+            "value": 0,  # Value is 0 since we're using tokens (WFLR for FLR)
+            "data": swap_data,
+            "gasPrice": self.web3.eth.gas_price,  # Use legacy gas price for Flare
+            "chainId": self.web3.eth.chain_id
         }
+        transactions.append(swap_tx)
 
-        # Create approval transaction if needed
-        approval_tx = None
-        if from_token.upper() != "FLR":
-            approval_tx = self._approve_token_if_needed(
-                from_token_address, self.v3_router.address, amount_in_wei, sender
-            )
-
-        return swap_tx, approval_tx
+        self.logger.info(
+            "v3_swap_transactions_created", 
+            transaction_count=len(transactions),
+            is_flr_source=is_flr_source
+        )
+        
+        return transactions
 
     def create_swap_tx(
         self,
@@ -527,7 +772,8 @@ class DeFiService:
         use_v3: bool = True,  # Default to V3 for better pricing
         fee_tier: int = 3000,  # 0.3% fee tier
         slippage: Decimal = DEFAULT_SLIPPAGE,
-    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        include_flr_wrap: bool = True,  # Whether to include wrap and approve steps for FLR
+    ) -> list[dict[str, Any]]:
         """
         Create a transaction for swapping tokens, using either V2 or V3 router.
         
@@ -539,10 +785,13 @@ class DeFiService:
             use_v3: Whether to use V3 router (default True)
             fee_tier: Fee tier for V3 pool (ignored for V2)
             slippage: Maximum slippage tolerance
+            include_flr_wrap: For FLR sources, whether to include wrap and approve steps
             
         Returns:
-            Tuple of (swap_tx, approval_tx)
-            approval_tx may be None if approval is not needed
+            List of transaction dictionaries in execution order:
+            - For V2, non-FLR: [approval_tx (if needed), swap_tx]
+            - For V3, non-FLR: [approval_tx (if needed), swap_tx]
+            - For V3, FLR: [wrap_tx, approve_tx, swap_tx] (if include_flr_wrap=True)
         """
         # Validate inputs
         if not from_token or not to_token:
@@ -566,15 +815,24 @@ class DeFiService:
                 sender=sender,
                 fee_tier=fee_tier,
                 slippage=slippage,
+                include_wflr_steps=include_flr_wrap,
             )
         else:
-            return self.create_v2_swap_tx(
+            # For V2 router, convert tuple to list
+            swap_tx, approval_tx = self.create_v2_swap_tx(
                 from_token=from_token,
                 to_token=to_token,
                 amount=amount,
                 sender=sender,
                 slippage=slippage,
             )
+            
+            transactions = []
+            if approval_tx:
+                transactions.append(approval_tx)
+            transactions.append(swap_tx)
+            
+            return transactions
 
     def create_v2_add_liquidity_tx(
         self,
@@ -925,3 +1183,119 @@ class DeFiService:
                 amount_b=amount_b,
                 sender=sender,
             )
+
+    def create_swap_flr_to_usdc_txs(
+        self,
+        amount: float,
+        sender: str
+    ) -> list[dict[str, Any]]:
+        """
+        Create transactions for the complete flow of swapping FLR to USDC.
+        This is now a wrapper around create_v3_swap_tx with FLR and USDC as parameters.
+        
+        Args:
+            amount: Amount of FLR to swap
+            sender: Sender address
+            
+        Returns:
+            List of transaction dictionaries [wrap_tx, approve_tx, swap_tx]
+        """
+        self.logger.info("creating_flr_to_usdc_transactions", amount=amount, sender=sender)
+        
+        # Just use the updated create_v3_swap_tx function
+        transactions = self.create_v3_swap_tx(
+            from_token="FLR",
+            to_token="USDC",
+            amount=amount,
+            sender=sender,
+            include_wflr_steps=True
+        )
+        
+        # Verify we have the expected 3 transactions
+        if len(transactions) != 3:
+            raise ValueError(f"Expected 3 transactions, got {len(transactions)}")
+            
+        return transactions
+
+    def swap_flr_to_usdc(
+        self,
+        amount: float,
+        sender: str,
+        private_key: str,
+        slippage: Decimal = DEFAULT_SLIPPAGE,
+        wait_for_receipts: bool = True
+    ) -> list[str]:
+        """
+        Execute a complete flow to swap FLR to USDC, handling all steps:
+        1. Wrap FLR to WFLR
+        2. Approve WFLR for router
+        3. Swap WFLR to USDC
+        
+        Args:
+            amount: Amount of FLR to swap
+            sender: Sender address
+            private_key: Private key for signing transactions
+            slippage: Maximum slippage tolerance
+            wait_for_receipts: Whether to wait for transaction receipts
+            
+        Returns:
+            List of transaction hashes in order [wrap_tx, approve_tx, swap_tx]
+        """
+        self.logger.info("starting_flr_to_usdc_swap", amount=amount, sender=sender)
+        
+        # Get transactions using create_v3_swap_tx with specific slippage
+        transactions = self.create_v3_swap_tx(
+            from_token="FLR",
+            to_token="USDC",
+            amount=amount,
+            sender=sender,
+            slippage=slippage,
+            include_wflr_steps=True
+        )
+        
+        # Verify we have the expected 3 transactions
+        if len(transactions) != 3:
+            raise ValueError(f"Expected 3 transactions, got {len(transactions)}")
+        
+        # Sign and send all transactions
+        tx_hashes = []
+        for i, tx in enumerate(transactions):
+            step_name = ["wrap", "approve", "swap"][i]
+            self.logger.info(f"sending_{step_name}_transaction", sender=sender)
+            
+            # Sign the transaction
+            signed_tx = self.web3.eth.account.sign_transaction(tx, private_key)
+            
+            # Send the transaction
+            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash_hex = tx_hash.hex()
+            tx_hashes.append(tx_hash_hex)
+            
+            self.logger.info(
+                f"{step_name}_transaction_sent",
+                tx_hash=tx_hash_hex,
+                sender=sender
+            )
+            
+            # Wait for receipt if requested
+            if wait_for_receipts:
+                receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+                self.logger.info(
+                    f"{step_name}_transaction_mined",
+                    status=receipt["status"],
+                    gas_used=receipt["gasUsed"],
+                    block_number=receipt["blockNumber"]
+                )
+                
+                # If the transaction failed, stop the process
+                if receipt["status"] != 1:
+                    raise ValueError(f"{step_name.capitalize()} transaction failed: {tx_hash_hex}")
+        
+        self.logger.info(
+            "flr_to_usdc_swap_completed",
+            wrap_tx=tx_hashes[0],
+            approve_tx=tx_hashes[1],
+            swap_tx=tx_hashes[2]
+        )
+        
+        return tx_hashes
