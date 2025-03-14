@@ -59,7 +59,7 @@ class FlareProvider:
         self.address: ChecksumAddress | None = None
         self.private_key: str | None = None
         self.tx_queue: list[TxQueueElement] = []
-        self.w3 = Web3(Web3.HTTPProvider(web3_provider_url))
+        self.w3 = Web3(Web3.HTTPProvider("https://flare-api.flare.network/ext/C/rpc"))
         
         # Add PoA middleware to handle extraData field in Flare Network
         self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
