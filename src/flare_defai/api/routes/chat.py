@@ -255,7 +255,7 @@ class ChatRouter:
             dict[str, str]: Response containing transaction result
         """
         if not self.blockchain.address:
-            await self.handle_generate_account(message)
+            return {"response": "No account exists. Please create an account first with 'Create an account for me'."}
 
         prompt, mime_type, schema = self.prompts.get_formatted_prompt(
             "token_send", user_input=message
@@ -263,12 +263,30 @@ class ChatRouter:
         send_token_response = self.ai.generate(
             prompt=prompt, response_mime_type=mime_type, response_schema=schema
         )
-        send_token_json = json.loads(send_token_response.text)
-        expected_json_len = 2
-        if (
-            len(send_token_json) != expected_json_len
-            or send_token_json.get("amount") == 0.0
-        ):
+        
+        try:
+            send_token_json = json.loads(send_token_response.text)
+            
+            # Check for all required fields
+            expected_json_len = 2
+            has_to_address = "to_address" in send_token_json
+            has_amount = "amount" in send_token_json and send_token_json.get("amount") != 0.0
+            
+            if not (has_to_address and has_amount):
+                self.logger.debug(
+                    "send_token_validation_failed", 
+                    response_json=send_token_response.text,
+                    has_to_address=has_to_address,
+                    has_amount=has_amount
+                )
+                
+                # Request more details with the follow-up prompt
+                prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
+                follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)
+                return {"response": follow_up_response.text}
+                
+        except (json.JSONDecodeError, KeyError) as e:
+            self.logger.error("send_token_json_error", error=str(e), response=send_token_response.text)
             # Request more details with the follow-up prompt
             prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
             follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)
@@ -330,7 +348,7 @@ class ChatRouter:
         """
 
         if not self.blockchain.address:
-            await self.handle_generate_account(message)
+            return {"response": "No account exists. Please create an account first with 'Create an account for me'."}
 
         prompt, mime_type, schema = self.prompts.get_formatted_prompt(
             "swap_token", user_input=message
@@ -338,20 +356,97 @@ class ChatRouter:
         swap_token_response = self.ai.generate(
             prompt=prompt, response_mime_type=mime_type, response_schema=schema
         )
-        swap_token_json = json.loads(swap_token_response.text)
-        expected_json_len = 3
-
-        if (
-            len(swap_token_json) != expected_json_len
-            or swap_token_json.get("amount") == 0.0
-            or swap_token_json.get("from_token") == swap_token_json.get("to_token")
-        ):
-            # Request more details with the follow-up prompt
+        
+        try:
+            # Fix any trailing commas that might cause JSON parse errors
+            fixed_json_text = swap_token_response.text.replace(",\n  }", "\n  }")
+            swap_token_json = json.loads(fixed_json_text)
+            
+            # Check for all required fields
+            has_from_token = "from_token" in swap_token_json
+            has_to_token = "to_token" in swap_token_json
+            has_amount = "amount" in swap_token_json and swap_token_json.get("amount") != 0.0
+            
+            # If we have both tokens but no amount, add a default amount of 1.0
+            if has_from_token and has_to_token and not has_amount:
+                self.logger.debug(
+                    "swap_token_adding_default_amount",
+                    from_token=swap_token_json.get("from_token"),
+                    to_token=swap_token_json.get("to_token")
+                )
+                swap_token_json["amount"] = 1.0
+                has_amount = True
+            
+            # Check if tokens are the same
+            tokens_are_different = (
+                has_from_token and 
+                has_to_token and 
+                swap_token_json.get("from_token") != swap_token_json.get("to_token")
+            )
+            
+            if not (has_amount and has_from_token and has_to_token and tokens_are_different):
+                self.logger.debug(
+                    "swap_token_validation_failed", 
+                    response_json=swap_token_response.text,
+                    fixed_json=fixed_json_text,
+                    has_amount=has_amount,
+                    has_from_token=has_from_token,
+                    has_to_token=has_to_token,
+                    tokens_are_different=tokens_are_different
+                )
+                
+                # Request more details with the follow-up prompt
+                prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
+                follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)
+                return {"response": follow_up_response.text}
+            
+        except (json.JSONDecodeError, KeyError) as e:
+            self.logger.error("swap_token_json_error", error=str(e), response=swap_token_response.text)
+            # Try to extract tokens from the failed JSON response using regex
+            import re
+            from_token_match = re.search(r'"from_token":\s*"([^"]+)"', swap_token_response.text)
+            to_token_match = re.search(r'"to_token":\s*"([^"]+)"', swap_token_response.text)
+            
+            # If both tokens are found in the failed JSON, try to construct a valid JSON
+            if from_token_match and to_token_match:
+                from_token = from_token_match.group(1)
+                to_token = to_token_match.group(1)
+                
+                # Only proceed if tokens are different
+                if from_token != to_token:
+                    self.logger.debug(
+                        "swap_token_recovered_from_invalid_json",
+                        from_token=from_token,
+                        to_token=to_token
+                    )
+                    swap_token_json = {
+                        "from_token": from_token,
+                        "to_token": to_token,
+                        "amount": 1.0  # Default amount
+                    }
+                    
+                    # Skip to transaction creation
+                    return await self._create_swap_transaction(message, swap_token_json)
+            
+            # If recovery failed, ask for more details
             prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
             follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)
             return {"response": follow_up_response.text}
 
-        # Use the DeFiService to create a swap transaction
+        # All validation passed, create the transaction
+        return await self._create_swap_transaction(message, swap_token_json)
+    
+    async def _create_swap_transaction(self, message: str, swap_token_json: dict) -> dict[str, str]:
+        """
+        Helper method to create a swap transaction.
+        
+        Args:
+            message: Original user message
+            swap_token_json: Validated JSON with swap parameters
+            
+        Returns:
+            dict[str, str]: Response containing transaction preview or error
+        """
         try:
             # Default to V3 swap but could be configurable
             tx = self.defi.create_swap_tx(
@@ -391,7 +486,7 @@ class ChatRouter:
             dict[str, str]: Response containing transaction preview or follow-up prompt
         """
         if not self.blockchain.address:
-            await self.handle_generate_account(message)
+            return {"response": "No account exists. Please create an account first with 'Create an account for me'."}
 
         prompt, mime_type, schema = self.prompts.get_formatted_prompt(
             "add_liquidity", user_input=message
@@ -399,16 +494,42 @@ class ChatRouter:
         add_liquidity_response = self.ai.generate(
             prompt=prompt, response_mime_type=mime_type, response_schema=schema
         )
-        add_liquidity_json = json.loads(add_liquidity_response.text)
-        expected_json_len = 4
-
-        # Validate the response
-        if (
-            len(add_liquidity_json) != expected_json_len
-            or add_liquidity_json.get("amount_a") == 0.0
-            or add_liquidity_json.get("amount_b") == 0.0
-            or add_liquidity_json.get("token_a") == add_liquidity_json.get("token_b")
-        ):
+        
+        try:
+            add_liquidity_json = json.loads(add_liquidity_response.text)
+            
+            # Check for all required fields
+            expected_json_len = 4
+            has_token_a = "token_a" in add_liquidity_json
+            has_token_b = "token_b" in add_liquidity_json
+            has_amount_a = "amount_a" in add_liquidity_json and add_liquidity_json.get("amount_a") != 0.0
+            has_amount_b = "amount_b" in add_liquidity_json and add_liquidity_json.get("amount_b") != 0.0
+            
+            # Check if tokens are the same
+            tokens_are_different = (
+                has_token_a and 
+                has_token_b and 
+                add_liquidity_json.get("token_a") != add_liquidity_json.get("token_b")
+            )
+            
+            if not (has_token_a and has_token_b and has_amount_a and has_amount_b and tokens_are_different):
+                self.logger.debug(
+                    "add_liquidity_validation_failed", 
+                    response_json=add_liquidity_response.text,
+                    has_token_a=has_token_a,
+                    has_token_b=has_token_b,
+                    has_amount_a=has_amount_a,
+                    has_amount_b=has_amount_b,
+                    tokens_are_different=tokens_are_different
+                )
+                
+                # Request more details with the follow-up prompt
+                prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
+                follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)
+                return {"response": follow_up_response.text}
+                
+        except (json.JSONDecodeError, KeyError) as e:
+            self.logger.error("add_liquidity_json_error", error=str(e), response=add_liquidity_response.text)
             # Request more details with the follow-up prompt
             prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
             follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)

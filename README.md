@@ -25,7 +25,7 @@
 - **Gemini 2.0 + over 300 LLMs supported**  
   Utilize Google Gemini's latest model with structured query support for advanced AI functionalities.
 
-<img width="500" alt="Artemis" src="https://github.com/user-attachments/assets/921fbfe2-9d52-496c-9b48-9dfc32a86208" />
+<img width="500" alt="Flare DeFAI" src="https://github.com/user-attachments/assets/921fbfe2-9d52-496c-9b48-9dfc32a86208" />
 
 ## 🎯 Getting Started
 

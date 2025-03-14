@@ -203,9 +203,11 @@ Extract EXACTLY three pieces of information from the input for a token swap oper
      - With tokens: "5 FLR", "10 USDC"
    • Extract first valid number only
    • Amount MUST be positive
-   • FAIL if no valid amount found
+   • If no amount explicitly stated, use 1.0 as the default
 
 Input: ${user_input}
+
+BE CAREFUL: Your output must be EXACT, VALID JSON. No trailing commas. Include ALL THREE required fields.
 
 Response format:
 {
@@ -214,20 +216,26 @@ Response format:
   "amount": <float_value>
 }
 
+CRITICAL REQUIREMENTS:
+1. You MUST include ALL THREE fields (from_token, to_token, amount)
+2. The amount MUST be a float number (not a string)
+3. The JSON MUST be valid (no syntax errors, no trailing commas)
+4. If amount is not clearly stated in input, use 1.0 as default
+5. Do not output anything except the JSON object
+
 Processing rules:
 - All three fields MUST be present
-- DO NOT infer missing values
 - DO NOT allow same token pairs
 - Normalize token symbols to uppercase
 - Amount MUST be float type
 - Amount MUST be positive
-- FAIL if any value missing or invalid
 
 Examples:
 ✓ "swap 100 FLR to USDC" → {"from_token": "FLR", "to_token": "USDC", "amount": 100.0}
 ✓ "exchange 50.5 flr for usdc" → {"from_token": "FLR", "to_token": "USDC", "amount": 50.5}
+✓ "swap flr to usdc" → {"from_token": "FLR", "to_token": "USDC", "amount": 1.0}
 ✗ "swap flr to flr" → FAIL (same token)
-✗ "swap tokens" → FAIL (missing amount)
+✗ "swap tokens" → FAIL (missing tokens)
 """
 
 

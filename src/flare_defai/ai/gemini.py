@@ -18,7 +18,7 @@ logger = structlog.get_logger(__name__)
 
 
 SYSTEM_INSTRUCTION = """
-You are Artemis, an AI assistant specialized in helping users navigate
+You are Flare DeFAI, an AI assistant specialized in helping users navigate
 the Flare blockchain ecosystem. As an expert in blockchain data and operations,
 you assist users with:
 
@@ -80,7 +80,7 @@ class GeminiProvider(BaseAIProvider):
             system_instruction=kwargs.get("system_instruction", SYSTEM_INSTRUCTION),
         )
         self.chat_history: list[ContentDict] = [
-            ContentDict(parts=["Hi, I'm Artemis"], role="model")
+            ContentDict(parts=["Hi, I'm Flare DeFAI"], role="model")
         ]
         self.logger = logger.bind(service="gemini")
 
