@@ -123,7 +123,7 @@ class ChatRouter:
                     prompt, mime_type, schema = self.prompts.get_formatted_prompt(
                         "tx_confirmation",
                         tx_hash=tx_hash,
-                        block_explorer=settings.web3_explorer_url,
+                        block_explorer="https://flare-explorer.flare.network/",
                     )
                     tx_confirmation_response = self.ai.generate(
                         prompt=prompt,
