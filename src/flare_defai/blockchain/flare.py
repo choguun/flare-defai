@@ -6,12 +6,13 @@ It handles account management, transaction queuing, and blockchain interactions.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Any, Optional
 
 import structlog
 from eth_account import Account
 from eth_typing import ChecksumAddress
 from web3 import Web3
+from web3.middleware import ExtraDataToPOAMiddleware
 from web3.types import TxParams
 
 from flare_defai.blockchain.ftso import FTSOPriceFeed
@@ -59,6 +60,10 @@ class FlareProvider:
         self.private_key: str | None = None
         self.tx_queue: list[TxQueueElement] = []
         self.w3 = Web3(Web3.HTTPProvider(web3_provider_url))
+        
+        # Add PoA middleware to handle extraData field in Flare Network
+        self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        
         self.logger = logger.bind(router="flare_provider")
         self.ftso_feed = FTSOPriceFeed()
 
@@ -157,39 +162,37 @@ class FlareProvider:
         self.logger.debug("check_balance", balance_wei=balance_wei)
         return float(self.w3.from_wei(balance_wei, "ether"))
 
-    def check_balance_usd(self) -> Tuple[float, Optional[float]]:
+    def check_balance_usd(self) -> tuple[float, float | None]:
         """
-        Check the balance of the current account and convert to USD value.
+        Check the balance in native currency and convert to USD.
 
         Returns:
-            Tuple[float, Optional[float]]: (Balance in FLR, Balance in USD)
-
-        Raises:
-            ValueError: If account does not exist
+            tuple containing (balance_in_flr, balance_in_usd)
+            Where balance_in_usd may be None if price feed is unavailable
         """
         if not self.address:
-            msg = "Account does not exist"
-            raise ValueError(msg)
-            
-        flr_balance = self.check_balance()
-        usd_balance = self.ftso_feed.calculate_usd_value("FLR", flr_balance)
-        
-        self.logger.debug("check_balance_usd", 
-                         flr_balance=flr_balance, 
-                         usd_balance=usd_balance)
-        
-        return flr_balance, usd_balance
-        
-    def get_token_balances_with_usd(self) -> Dict[str, Tuple[float, Optional[float]]]:
+            return 0.0, None
+
+        # Get balance in FLR
+        balance_wei = self.w3.eth.get_balance(self.address)
+        balance_flr = float(self.w3.from_wei(balance_wei, "ether"))
+
+        # Convert to USD using FTSO price feed
+        flr_price, _ = self.ftso_feed.get_price("FLR")
+        if flr_price is not None:
+            balance_usd = balance_flr * flr_price
+        else:
+            balance_usd = None
+
+        return balance_flr, balance_usd
+
+    def get_token_balances_with_usd(self) -> dict[str, tuple[float, float | None]]:
         """
-        Get balances for common tokens with USD values.
-        Currently only returns native FLR, but can be extended to other tokens.
-
+        Get balances of all supported tokens with their USD values.
+        
         Returns:
-            Dict[str, Tuple[float, Optional[float]]]: Dictionary mapping token symbols to (token_balance, usd_value) tuples
-
-        Raises:
-            ValueError: If account does not exist
+            Dictionary of token symbols to (balance, usd_value) tuples
+            Where usd_value may be None if price data is unavailable
         """
         if not self.address:
             msg = "Account does not exist"

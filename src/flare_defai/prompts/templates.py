@@ -207,35 +207,36 @@ Extract EXACTLY three pieces of information from the input for a token swap oper
 
 Input: ${user_input}
 
-BE CAREFUL: Your output must be EXACT, VALID JSON. No trailing commas. Include ALL THREE required fields.
+CRITICAL: YOUR RESPONSE MUST BE VALID JSON WITH THE EXACT FORMAT BELOW. DO NOT COMBINE FIELDS OR OMIT ANY FIELDS.
 
-Response format:
 {
-  "from_token": "<UPPERCASE_TOKEN_SYMBOL>",
-  "to_token": "<UPPERCASE_TOKEN_SYMBOL>",
-  "amount": <float_value>
+  "from_token": "TOKEN1",
+  "to_token": "TOKEN2",
+  "amount": 1.0
 }
 
-CRITICAL REQUIREMENTS:
-1. You MUST include ALL THREE fields (from_token, to_token, amount)
-2. The amount MUST be a float number (not a string)
-3. The JSON MUST be valid (no syntax errors, no trailing commas)
-4. If amount is not clearly stated in input, use 1.0 as default
-5. Do not output anything except the JSON object
+RULES FOR JSON GENERATION:
+1. MUST include all three fields exactly as shown
+2. EACH FIELD MUST BE SEPARATE - NEVER combine fields like "to_token": "USDC,amount:1.0" 
+3. Each field must be on its own line with proper JSON syntax
+4. "amount" MUST be a number, not a string
+5. NEVER add extra fields or trailing commas
+6. DO NOT add any text before or after the JSON
 
-Processing rules:
-- All three fields MUST be present
-- DO NOT allow same token pairs
-- Normalize token symbols to uppercase
-- Amount MUST be float type
-- Amount MUST be positive
+VALID EXAMPLE:
+✓ For "swap 100 FLR to USDC":
+{
+  "from_token": "FLR",
+  "to_token": "USDC",
+  "amount": 100.0
+}
 
-Examples:
-✓ "swap 100 FLR to USDC" → {"from_token": "FLR", "to_token": "USDC", "amount": 100.0}
-✓ "exchange 50.5 flr for usdc" → {"from_token": "FLR", "to_token": "USDC", "amount": 50.5}
-✓ "swap flr to usdc" → {"from_token": "FLR", "to_token": "USDC", "amount": 1.0}
-✗ "swap flr to flr" → FAIL (same token)
-✗ "swap tokens" → FAIL (missing tokens)
+COMMON ERRORS TO AVOID:
+✗ NEVER do: "to_token": "USDC,amount:1.0"  (THIS IS THE MOST COMMON ERROR)
+✗ NEVER add commas at end of last property: "amount": 1.0,
+✗ NEVER omit quotes around token names
+✗ NEVER put amount in quotes: "amount": "1.0"
+✗ NEVER omit any of the three required fields
 """
 
 

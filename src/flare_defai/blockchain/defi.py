@@ -11,12 +11,14 @@ Integration with SparkDEX (V2 & V3.1 DEX):
 """
 
 import json
+import time
 from decimal import Decimal
 from typing import Any
 
 import structlog
 from web3 import Web3
 from web3.contract import Contract
+from web3.middleware import ExtraDataToPOAMiddleware
 
 logger = structlog.get_logger(__name__)
 
@@ -214,10 +216,7 @@ ERC20_ABI = json.loads("""
 TOKEN_ADDRESSES = {
     "FLR": "0x1111111111111111111111111111111111111111",  # Native token, placeholder address
     "WFLR": "0x1D80c49BbBCd1C0911346656B529DF9E5c2F783d",  # Wrapped FLR
-    "USDC": "0xeCF51Ee929f4886dD9d41A703d88c3Aa1D777455",
-    "USDT": "0x8aE0EeedD35DbEFed8C4903e31A4Ab8d6991A4e2",
-    "WETH": "0xaCB447D8dD750752075275EF907362e825fDBa10",
-    "sFLR": "0x02f0826ef6aD107Cfc861152B32B52fD11BaB9ED",
+    "USDC": "0xFbDa5F676cB37624f28265A144A48B0d6e87d3b6",
 }
 
 # Router contracts for SparkDEX on Flare network
@@ -262,6 +261,11 @@ class DeFiService:
             web3: Initialized Web3 instance
         """
         self.web3 = web3
+        
+        # Add PoA middleware to handle extraData field in Flare Network
+        if ExtraDataToPOAMiddleware not in self.web3.middleware_onion:
+            self.web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            
         self.logger = logger.bind(service="defi")
 
         # Initialize contract instances
@@ -288,6 +292,20 @@ class DeFiService:
         return self.web3.eth.contract(
             address=self.web3.to_checksum_address(token_address), abi=ERC20_ABI
         )
+
+    def _get_eip1559_tx_params(self) -> dict[str, Any]:
+        """
+        Get standard EIP-1559 transaction parameters.
+        
+        Returns:
+            Dictionary of base transaction parameters
+        """
+        return {
+            "maxFeePerGas": self.web3.eth.gas_price,
+            "maxPriorityFeePerGas": self.web3.eth.max_priority_fee,
+            "chainId": self.web3.eth.chain_id,
+            "type": 2,  # EIP-1559 transaction
+        }
 
     def _approve_token_if_needed(
         self, token_address: str, spender: str, amount: int, sender: str
@@ -318,9 +336,9 @@ class DeFiService:
             "from": sender,
             "to": token_address,
             "gas": 100000,  # Estimate gas in production
-            "gasPrice": self.web3.eth.gas_price,
             "nonce": self.web3.eth.get_transaction_count(sender),
-            "data": token_contract.encodeABI(fn_name="approve", args=[spender, amount]),
+            "data": token_contract.functions.approve(spender, amount).build_transaction({"gas": 0, "gasPrice": 0, "nonce": 0})["data"],
+            **self._get_eip1559_tx_params()
         }
 
         self.logger.info(
@@ -402,10 +420,10 @@ class DeFiService:
             "from": sender,
             "to": self.v2_router.address,
             "gas": 300000,  # Estimate gas in production
-            "gasPrice": self.web3.eth.gas_price,
             "nonce": self.web3.eth.get_transaction_count(sender),
             "value": value,
-            "data": self.v2_router.encodeABI(fn_name=fn_name, args=args),
+            "data": self.v2_router.functions[fn_name](*args).build_transaction({"gas": 0, "gasPrice": 0, "nonce": 0})["data"],
+            **self._get_eip1559_tx_params()
         }
 
         # Create approval transaction if needed
@@ -485,10 +503,10 @@ class DeFiService:
             "from": sender,
             "to": self.v3_router.address,
             "gas": 300000,  # Estimate gas in production
-            "gasPrice": self.web3.eth.gas_price,
             "nonce": self.web3.eth.get_transaction_count(sender),
             "value": amount_in_wei if from_token.upper() == "FLR" else 0,
-            "data": self.v3_router.encodeABI(fn_name="exactInputSingle", args=[params]),
+            "data": self.v3_router.functions.exactInputSingle(params).build_transaction({"gas": 0, "gasPrice": 0, "nonce": 0})["data"],
+            **self._get_eip1559_tx_params()
         }
 
         # Create approval transaction if needed
@@ -506,36 +524,57 @@ class DeFiService:
         to_token: str,
         amount: float,
         sender: str,
-        use_v3: bool = True,
-    ) -> dict[str, Any]:
+        use_v3: bool = True,  # Default to V3 for better pricing
+        fee_tier: int = 3000,  # 0.3% fee tier
+        slippage: Decimal = DEFAULT_SLIPPAGE,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         """
-        Create a transaction for swapping tokens, choosing between V2 and V3.
-
+        Create a transaction for swapping tokens, using either V2 or V3 router.
+        
         Args:
-            from_token: Symbol of the token to swap from
-            to_token: Symbol of the token to swap to
-            amount: Amount to swap (in token units, not wei)
+            from_token: Source token symbol
+            to_token: Destination token symbol
+            amount: Amount to swap (in token decimals)
             sender: Address of the sender
-            use_v3: Whether to use V3 or V2
-
+            use_v3: Whether to use V3 router (default True)
+            fee_tier: Fee tier for V3 pool (ignored for V2)
+            slippage: Maximum slippage tolerance
+            
         Returns:
-            Transaction dictionary
+            Tuple of (swap_tx, approval_tx)
+            approval_tx may be None if approval is not needed
         """
+        # Validate inputs
+        if not from_token or not to_token:
+            raise ValueError("Both source and target tokens must be specified")
+            
+        if from_token.upper() == to_token.upper():
+            raise ValueError("Source and target tokens must be different")
+            
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+            
+        # Ensure sender is a valid address
+        sender = self.web3.to_checksum_address(sender)
+        
+        # Create swap using requested version
         if use_v3:
-            swap_tx, approval_tx = self.create_v3_swap_tx(
-                from_token=from_token, to_token=to_token, amount=amount, sender=sender
+            return self.create_v3_swap_tx(
+                from_token=from_token,
+                to_token=to_token,
+                amount=amount,
+                sender=sender,
+                fee_tier=fee_tier,
+                slippage=slippage,
             )
         else:
-            swap_tx, approval_tx = self.create_v2_swap_tx(
-                from_token=from_token, to_token=to_token, amount=amount, sender=sender
+            return self.create_v2_swap_tx(
+                from_token=from_token,
+                to_token=to_token,
+                amount=amount,
+                sender=sender,
+                slippage=slippage,
             )
-
-        # If approval is needed, we should handle it separately
-        # For this implementation, we just return the swap transaction
-        # In a full implementation, we would need to wait for approval confirmation
-        # before executing the swap
-
-        return swap_tx
 
     def create_v2_add_liquidity_tx(
         self,
@@ -609,20 +648,17 @@ class DeFiService:
                     "from": sender,
                     "to": self.v2_router.address,
                     "gas": 300000,  # Estimate gas in production
-                    "gasPrice": self.web3.eth.gas_price,
                     "nonce": self.web3.eth.get_transaction_count(sender),
                     "value": eth_amount,
-                    "data": self.v2_router.encodeABI(
-                        fn_name="addLiquidityETH",
-                        args=[
-                            token,
-                            token_amount,
-                            token_amount_min,
-                            eth_amount_min,
-                            sender,
-                            deadline,
-                        ],
-                    ),
+                    "data": self.v2_router.functions.addLiquidityETH(
+                        token,
+                        token_amount,
+                        token_amount_min,
+                        eth_amount_min,
+                        sender,
+                        deadline,
+                    ).build_transaction({"gas": 0, "gasPrice": 0, "nonce": 0})["data"],
+                    **self._get_eip1559_tx_params()
                 }
 
                 # Add approval for the token if needed
@@ -643,20 +679,17 @@ class DeFiService:
                     "from": sender,
                     "to": self.v2_router.address,
                     "gas": 300000,  # Estimate gas in production
-                    "gasPrice": self.web3.eth.gas_price,
                     "nonce": self.web3.eth.get_transaction_count(sender),
                     "value": eth_amount,
-                    "data": self.v2_router.encodeABI(
-                        fn_name="addLiquidityETH",
-                        args=[
-                            token,
-                            token_amount,
-                            token_amount_min,
-                            eth_amount_min,
-                            sender,
-                            deadline,
-                        ],
-                    ),
+                    "data": self.v2_router.functions.addLiquidityETH(
+                        token,
+                        token_amount,
+                        token_amount_min,
+                        eth_amount_min,
+                        sender,
+                        deadline,
+                    ).build_transaction({"gas": 0, "gasPrice": 0, "nonce": 0})["data"],
+                    **self._get_eip1559_tx_params()
                 }
 
                 # Add approval for the token if needed
@@ -672,22 +705,19 @@ class DeFiService:
                 "from": sender,
                 "to": self.v2_router.address,
                 "gas": 300000,  # Estimate gas in production
-                "gasPrice": self.web3.eth.gas_price,
                 "nonce": self.web3.eth.get_transaction_count(sender),
                 "value": 0,
-                "data": self.v2_router.encodeABI(
-                    fn_name="addLiquidity",
-                    args=[
-                        token_a_address,
-                        token_b_address,
-                        amount_a_wei,
-                        amount_b_wei,
-                        amount_a_min,
-                        amount_b_min,
-                        sender,
-                        deadline,
-                    ],
-                ),
+                "data": self.v2_router.functions.addLiquidity(
+                    token_a_address,
+                    token_b_address,
+                    amount_a_wei,
+                    amount_b_wei,
+                    amount_a_min,
+                    amount_b_min,
+                    sender,
+                    deadline,
+                ).build_transaction({"gas": 0, "gasPrice": 0, "nonce": 0})["data"],
+                **self._get_eip1559_tx_params()
             }
 
             # Add approvals for both tokens if needed
@@ -813,10 +843,10 @@ class DeFiService:
             "from": sender,
             "to": self.v3_position_manager.address,
             "gas": 500000,  # Estimate gas in production
-            "gasPrice": self.web3.eth.gas_price,
             "nonce": self.web3.eth.get_transaction_count(sender),
             "value": value,
-            "data": self.v3_position_manager.encodeABI(fn_name="mint", args=[params]),
+            "data": self.v3_position_manager.functions.mint(params).build_transaction({"gas": 0, "gasPrice": 0, "nonce": 0})["data"],
+            **self._get_eip1559_tx_params()
         }
 
         # Add approval transactions for tokens if needed
@@ -847,7 +877,7 @@ class DeFiService:
         sender: str,
         use_v3: bool = True,
         fee_tier: int = 3000,  # Only for V3
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """
         Create a transaction for adding liquidity, choosing between V2 and V3.
 
@@ -861,10 +891,25 @@ class DeFiService:
             fee_tier: Fee tier for V3 pools
 
         Returns:
-            Transaction dictionary
+            Tuple of (add_liquidity_tx, list of approval_txs)
+            approval_txs may be empty if no approvals are needed
         """
+        # Validate inputs
+        if not token_a or not token_b:
+            raise ValueError("Both tokens must be specified")
+            
+        if token_a.upper() == token_b.upper():
+            raise ValueError("Tokens must be different")
+            
+        if amount_a <= 0 or amount_b <= 0:
+            raise ValueError("Amounts must be positive")
+            
+        # Ensure sender is a valid address
+        sender = self.web3.to_checksum_address(sender)
+        
+        # Create liquidity transaction using requested version
         if use_v3:
-            add_liquidity_tx, approval_txs = self.create_v3_add_liquidity_tx(
+            return self.create_v3_add_liquidity_tx(
                 token_a=token_a,
                 token_b=token_b,
                 amount_a=amount_a,
@@ -873,17 +918,10 @@ class DeFiService:
                 fee_tier=fee_tier,
             )
         else:
-            add_liquidity_tx, approval_txs = self.create_v2_add_liquidity_tx(
+            return self.create_v2_add_liquidity_tx(
                 token_a=token_a,
                 token_b=token_b,
                 amount_a=amount_a,
                 amount_b=amount_b,
                 sender=sender,
             )
-
-        # If approvals are needed, we should handle them separately
-        # For this implementation, we just return the add liquidity transaction
-        # In a full implementation, we would need to wait for approval confirmations
-        # before executing the add liquidity transaction
-
-        return add_liquidity_tx

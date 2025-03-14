@@ -448,23 +448,30 @@ class ChatRouter:
             dict[str, str]: Response containing transaction preview or error
         """
         try:
+            # Get token details from validated JSON
+            from_token = swap_token_json.get("from_token")
+            to_token = swap_token_json.get("to_token")
+            amount = swap_token_json.get("amount")
+            
             # Default to V3 swap but could be configurable
-            tx = self.defi.create_swap_tx(
-                from_token=swap_token_json.get("from_token"),
-                to_token=swap_token_json.get("to_token"),
-                amount=swap_token_json.get("amount"),
+            swap_tx, approval_tx = self.defi.create_swap_tx(
+                from_token=from_token,
+                to_token=to_token,
+                amount=amount,
                 sender=self.blockchain.address,
                 use_v3=True,  # Could be a setting or user preference
             )
 
-            self.logger.debug("swap_token_tx", tx=tx)
-            self.blockchain.add_tx_to_queue(msg=message, tx=tx)
+            # Handle approval if needed
+            if approval_tx:
+                self.logger.debug("swap_token_approval_needed", approval_tx=approval_tx)
+                self.blockchain.add_tx_to_queue(msg=f"Approve {from_token} for swap", tx=approval_tx)
+                return {"response": f"You need to approve {from_token} for trading first. Type CONFIRM to proceed with the approval transaction."}
+
+            self.logger.debug("swap_token_tx", tx=swap_tx)
+            self.blockchain.add_tx_to_queue(msg=message, tx=swap_tx)
 
             # Create a formatted preview for the user
-            from_token = swap_token_json.get("from_token")
-            to_token = swap_token_json.get("to_token")
-            amount = swap_token_json.get("amount")
-
             formatted_preview = (
                 f"Transaction Preview: Swapping {amount} {from_token} to {to_token}\n"
                 f"Type CONFIRM to proceed."
@@ -537,25 +544,37 @@ class ChatRouter:
 
         # Use the DeFiService to create an add liquidity transaction
         try:
+            # Extract details
+            token_a = add_liquidity_json.get("token_a")
+            token_b = add_liquidity_json.get("token_b")
+            amount_a = add_liquidity_json.get("amount_a")
+            amount_b = add_liquidity_json.get("amount_b")
+            
             # Default to V3 liquidity but could be configurable
-            tx = self.defi.create_add_liquidity_tx(
-                token_a=add_liquidity_json.get("token_a"),
-                token_b=add_liquidity_json.get("token_b"),
-                amount_a=add_liquidity_json.get("amount_a"),
-                amount_b=add_liquidity_json.get("amount_b"),
+            tx, approval_txs = self.defi.create_add_liquidity_tx(
+                token_a=token_a,
+                token_b=token_b,
+                amount_a=amount_a,
+                amount_b=amount_b,
                 sender=self.blockchain.address,
                 use_v3=True,  # Could be a setting or user preference
             )
+
+            # Handle approvals if needed
+            if approval_txs:
+                self.logger.debug("add_liquidity_approvals_needed", approval_txs=approval_txs)
+                
+                # Add the first approval to the queue
+                approval_tx = approval_txs[0]
+                approval_token = token_a if approval_tx['to'] == self.defi._get_token_address(token_a) else token_b
+                self.blockchain.add_tx_to_queue(msg=f"Approve {approval_token} for liquidity", tx=approval_tx)
+                
+                return {"response": f"You need to approve {approval_token} for trading first. Type CONFIRM to proceed with the approval transaction."}
 
             self.logger.debug("add_liquidity_tx", tx=tx)
             self.blockchain.add_tx_to_queue(msg=message, tx=tx)
 
             # Create a formatted preview for the user
-            token_a = add_liquidity_json.get("token_a")
-            token_b = add_liquidity_json.get("token_b")
-            amount_a = add_liquidity_json.get("amount_a")
-            amount_b = add_liquidity_json.get("amount_b")
-
             formatted_preview = (
                 f"Transaction Preview: Adding liquidity with {amount_a} {token_a} and {amount_b} {token_b}\n"
                 f"Type CONFIRM to proceed."

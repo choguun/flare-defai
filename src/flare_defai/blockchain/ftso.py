@@ -5,6 +5,7 @@ from typing import Optional, Dict, List, Tuple, Any
 
 import structlog
 from web3 import Web3
+from web3.middleware import ExtraDataToPOAMiddleware
 
 from flare_defai.settings import Settings
 
@@ -34,6 +35,11 @@ class FTSOPriceFeed:
         """Initialize the FTSO price feed module."""
         self.settings = settings or Settings()
         self.web3 = Web3(Web3.HTTPProvider(self.settings.web3_provider_url))
+        
+        # Add PoA middleware to handle extraData field in Flare Network (PoA chain)
+        # This middleware modifies the block data to handle the non-standard extraData field
+        self.web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        
         self.ftso_contract = self.web3.eth.contract(
             address=self.web3.to_checksum_address(self.FTSO_V2_ADDRESS),
             abi=self.ABI
