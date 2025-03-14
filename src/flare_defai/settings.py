@@ -31,9 +31,11 @@ class Settings(BaseSettings):
     # API version to use at the backend
     api_version: str = "v1"
     # URL for the Flare Network RPC provider
-    web3_provider_url: str = "https://coston2-api.flare.network/ext/C/rpc"
+    web3_provider_url: str = "https://flare-api.flare.network/ext/C/rpc"
     # URL for the Flare Network block explorer
-    web3_explorer_url: str = "https://coston2-explorer.flare.network/"
+    web3_explorer_url: str = "https://flare-explorer.flare.network/"
+    # Chain ID for the network (14=Flare mainnet, 114=Coston2 testnet)
+    chain_id: int = 14
 
     model_config = SettingsConfigDict(
         # This enables .env file support

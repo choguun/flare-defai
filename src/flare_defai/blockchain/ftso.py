@@ -14,11 +14,16 @@ logger = structlog.get_logger()
 class FTSOPriceFeed:
     """Interface to the Flare FTSO price feed system."""
     
-    # FTSO V2 addresses
+    # FTSO V2 addresses for different networks
     # See https://dev.flare.network/ftso/solidity-reference
-    FTSO_V2_ADDRESS = "0x3d893C53D9e8056135C26C8c638B76C8b60Df726"  # Coston2
+    FTSO_V2_ADDRESSES = {
+        # Coston2 testnet (chain ID 114)
+        114: "0x3d893C53D9e8056135C26C8c638B76C8b60Df726",
+        # Flare mainnet (chain ID 14)
+        14: "0x0fD8aA5c0d55C47E52C7739d1d6894EC9e177FF7"  # This is a placeholder, will be determined at runtime
+    }
     
-    # Common feed IDs
+    # Common feed IDs (same across networks)
     FEED_IDS = {
         "FLR/USD": "0x01464c522f55534400000000000000000000000000",
         "BTC/USD": "0x014254432f55534400000000000000000000000000",
@@ -41,12 +46,12 @@ class FTSOPriceFeed:
         self.web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         
         self.ftso_contract = self.web3.eth.contract(
-            address=self.web3.to_checksum_address(self.FTSO_V2_ADDRESS),
+            address=self.web3.to_checksum_address(self.FTSO_V2_ADDRESSES[self.settings.chain_id]),
             abi=self.ABI
         )
         logger.debug("FTSO price feed initialized", 
                      provider=self.settings.web3_provider_url,
-                     contract=self.FTSO_V2_ADDRESS)
+                     contract=self.FTSO_V2_ADDRESSES[self.settings.chain_id])
     
     def get_price(self, symbol: str) -> Tuple[Optional[float], int]:
         """

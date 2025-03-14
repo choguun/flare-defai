@@ -211,7 +211,7 @@ ERC20_ABI = json.loads("""
 ]
 """)
 
-# Common token addresses for Flare/Coston2 network
+# Common token addresses for Mainnet network
 # In a production app, these would typically come from a configuration file or database
 TOKEN_ADDRESSES = {
     "FLR": "0x1111111111111111111111111111111111111111",  # Native token, placeholder address
