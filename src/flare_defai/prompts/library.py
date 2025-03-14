@@ -31,12 +31,13 @@ from flare_defai.prompts.schemas import (
 from flare_defai.prompts.templates import (
     ADD_LIQUIDITY,
     CONVERSATIONAL,
+    FOLLOW_UP_TOKEN_SEND,
     GENERATE_ACCOUNT,
     REMOTE_ATTESTATION,
     REMOVE_LIQUIDITY,
     SEMANTIC_ROUTER,
+    SWAP_TOKEN,
     TOKEN_SEND,
-    TOKEN_SWAP,
     TX_CONFIRMATION,
 )
 
@@ -81,11 +82,14 @@ class PromptLibrary:
         Creates and adds the following default prompts:
         - semantic_router: For routing user queries
         - token_send: For token transfer operations
-        - token_swap: For token swap operations
+        - swap_token: For token swap operations
+        - add_liquidity: For adding liquidity to a pool
+        - remove_liquidity: For removing liquidity from a pool
         - generate_account: For wallet generation
         - conversational: For general user interactions
         - request_attestation: For remote attestation requests
         - tx_confirmation: For transaction confirmation
+        - follow_up_token_send: For follow-up prompts when token operation parameters are incomplete
 
         This method is called automatically during instance initialization.
         """
@@ -145,9 +149,9 @@ class PromptLibrary:
                 category="defai",
             ),
             Prompt(
-                name="token_swap",
+                name="swap_token",
                 description="Extract token swap parameters from user input",
-                template=TOKEN_SWAP,
+                template=SWAP_TOKEN,
                 required_inputs=["user_input"],
                 response_schema=TokenSwapResponse,
                 response_mime_type="application/json",
@@ -169,6 +173,15 @@ class PromptLibrary:
                 required_inputs=["user_input"],
                 response_schema=TokenRemoveLiquidityResponse,
                 response_mime_type="application/json",
+                category="defai",
+            ),
+            Prompt(
+                name="follow_up_token_send",
+                description="Follow-up prompt when token operation parameters are incomplete",
+                template=FOLLOW_UP_TOKEN_SEND,
+                required_inputs=None,
+                response_schema=None,
+                response_mime_type=None,
                 category="defai",
             ),
         ]

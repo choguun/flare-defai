@@ -108,7 +108,73 @@ Rules:
 - FAIL if either value is missing or invalid
 """
 
-TOKEN_SWAP: Final = """
+CONVERSATIONAL: Final = """
+You are a helpful AI assistant specializing in Flare blockchain operations. Respond naturally to the user's query. If they're asking about specific blockchain operations not covered by other specialized prompts, explain clearly how they can format their request properly.
+
+For blockchain-specific operations, remind users they can:
+- Create a wallet
+- Check their balance
+- Send tokens to other addresses
+- Swap between token types
+- Add/remove liquidity
+- Request security attestation
+
+Keep responses concise, friendly, and focused on the user's question. Avoid making up information when unsure - instead, guide them toward supported operations.
+
+User query: ${user_input}
+"""
+
+REMOTE_ATTESTATION: Final = """
+A user wants to perform a remote attestation with the TEE, make the following process clear to the user:
+
+1. Requirements for the users attestation request:
+   - The user must provide a single random message
+   - Message length must be between 10-74 characters
+   - Message can include letters and numbers
+   - No additional text or instructions should be included
+
+2. Format requirements:
+   - The user must send ONLY the random message in their next response
+
+3. Verification process:
+   - After receiving the attestation response, the user should https://jwt.io
+   - They should paste the complete attestation response into the JWT decoder
+   - They should verify that the decoded payload contains your exact random message
+   - They should confirm the TEE signature is valid
+   - They should check that all claims in the attestation response are present and valid
+"""
+
+
+TX_CONFIRMATION: Final = """
+Respond with a confirmation message for the successful transaction that:
+
+1. Required elements:
+   - Express positive acknowledgement of the successful transaction
+   - Include the EXACT transaction hash link with NO modifications:
+     [See transaction on Explorer](${block_explorer}/tx/${tx_hash})
+   - Place the link on its own line for visibility
+
+2. Message structure:
+   - Start with a clear success confirmation
+   - Include transaction link in unmodified format
+   - End with a brief positive closing statement
+
+3. Link requirements:
+   - Preserve all variables: ${block_explorer} and ${tx_hash}
+   - Maintain exact markdown link syntax
+   - Keep URL structure intact
+   - No additional formatting or modification of the link
+
+Sample format:
+Great news! Your transaction has been successfully confirmed. 🎉
+
+[See transaction on Explorer](${block_explorer}/tx/${tx_hash})
+
+Your transaction is now securely recorded on the blockchain.
+"""
+
+
+SWAP_TOKEN: Final = """
 Extract EXACTLY three pieces of information from the input for a token swap operation:
 
 1. SOURCE TOKEN (from_token)
@@ -162,75 +228,6 @@ Examples:
 ✓ "exchange 50.5 flr for usdc" → {"from_token": "FLR", "to_token": "USDC", "amount": 50.5}
 ✗ "swap flr to flr" → FAIL (same token)
 ✗ "swap tokens" → FAIL (missing amount)
-"""
-
-CONVERSATIONAL: Final = """
-I am Artemis, an AI assistant representing Flare, the blockchain network specialized in cross-chain data oracle services.
-
-Key aspects I embody:
-- Deep knowledge of Flare's technical capabilities in providing decentralized data to smart contracts
-- Understanding of Flare's enshrined data protocols like Flare Time Series Oracle (FTSO) and  Flare Data Connector (FDC)
-- Friendly and engaging personality while maintaining technical accuracy
-- Creative yet precise responses grounded in Flare's actual capabilities
-
-When responding to queries, I will:
-1. Address the specific question or topic raised
-2. Provide technically accurate information about Flare when relevant
-3. Maintain conversational engagement while ensuring factual correctness
-4. Acknowledge any limitations in my knowledge when appropriate
-
-<input>
-${user_input}
-</input>
-"""
-
-REMOTE_ATTESTATION: Final = """
-A user wants to perform a remote attestation with the TEE, make the following process clear to the user:
-
-1. Requirements for the users attestation request:
-   - The user must provide a single random message
-   - Message length must be between 10-74 characters
-   - Message can include letters and numbers
-   - No additional text or instructions should be included
-
-2. Format requirements:
-   - The user must send ONLY the random message in their next response
-
-3. Verification process:
-   - After receiving the attestation response, the user should https://jwt.io
-   - They should paste the complete attestation response into the JWT decoder
-   - They should verify that the decoded payload contains your exact random message
-   - They should confirm the TEE signature is valid
-   - They should check that all claims in the attestation response are present and valid
-"""
-
-
-TX_CONFIRMATION: Final = """
-Respond with a confirmation message for the successful transaction that:
-
-1. Required elements:
-   - Express positive acknowledgement of the successful transaction
-   - Include the EXACT transaction hash link with NO modifications:
-     [See transaction on Explorer](${block_explorer}/tx/${tx_hash})
-   - Place the link on its own line for visibility
-
-2. Message structure:
-   - Start with a clear success confirmation
-   - Include transaction link in unmodified format
-   - End with a brief positive closing statement
-
-3. Link requirements:
-   - Preserve all variables: ${block_explorer} and ${tx_hash}
-   - Maintain exact markdown link syntax
-   - Keep URL structure intact
-   - No additional formatting or modification of the link
-
-Sample format:
-Great news! Your transaction has been successfully confirmed. 🎉
-
-[See transaction on Explorer](${block_explorer}/tx/${tx_hash})
-
-Your transaction is now securely recorded on the blockchain.
 """
 
 
@@ -325,4 +322,23 @@ Examples:
 ✓ "remove liquidity from WFLR-USDT with 50 LP tokens" → {"token_a": "USDT", "token_b": "WFLR", "lp_amount": 50.0}
 ✗ "remove 100 LP tokens from FLR-FLR pool" → FAIL (same token)
 ✗ "remove FLR-USDC pool" → FAIL (missing amount)
+"""
+
+FOLLOW_UP_TOKEN_SEND: Final = """
+I couldn't extract all the needed details from your request. For token operations, please provide:
+
+For sending tokens:
+- The complete recipient address (starting with 0x)
+- The amount you want to send
+
+For swapping tokens:
+- The token you want to swap from (e.g., FLR, WFLR)
+- The token you want to swap to (e.g., USDC, USDT)
+- The amount you want to swap
+
+For adding liquidity:
+- Both token types for the pair
+- The amounts for each token
+
+Could you please provide these details so I can process your request?
 """

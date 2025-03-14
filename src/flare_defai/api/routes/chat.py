@@ -269,8 +269,9 @@ class ChatRouter:
             len(send_token_json) != expected_json_len
             or send_token_json.get("amount") == 0.0
         ):
-            prompt, _, _ = self.prompts.get_formatted_prompt("follow_up_token_send")
-            follow_up_response = self.ai.generate(prompt)
+            # Request more details with the follow-up prompt
+            prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
+            follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)
             return {"response": follow_up_response.text}
 
         tx = self.blockchain.create_send_flr_tx(
@@ -345,8 +346,9 @@ class ChatRouter:
             or swap_token_json.get("amount") == 0.0
             or swap_token_json.get("from_token") == swap_token_json.get("to_token")
         ):
-            prompt, _, _ = self.prompts.get_formatted_prompt("follow_up_token_send")
-            follow_up_response = self.ai.generate(prompt)
+            # Request more details with the follow-up prompt
+            prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
+            follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)
             return {"response": follow_up_response.text}
 
         # Use the DeFiService to create a swap transaction
@@ -407,8 +409,9 @@ class ChatRouter:
             or add_liquidity_json.get("amount_b") == 0.0
             or add_liquidity_json.get("token_a") == add_liquidity_json.get("token_b")
         ):
-            prompt, _, _ = self.prompts.get_formatted_prompt("follow_up_token_send")
-            follow_up_response = self.ai.generate(prompt)
+            # Request more details with the follow-up prompt
+            prompt, mime_type, schema = self.prompts.get_formatted_prompt("follow_up_token_send")
+            follow_up_response = self.ai.generate(prompt=prompt, response_mime_type=mime_type, response_schema=schema)
             return {"response": follow_up_response.text}
 
         # Use the DeFiService to create an add liquidity transaction
