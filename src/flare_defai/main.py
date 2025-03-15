@@ -24,6 +24,9 @@ from flare_defai import (
     Vtpm,
 )
 from flare_defai.settings import settings
+from flare_defai.api.dependencies import get_transaction_validator
+from flare_defai.blockchain.transaction_validator import SecureTransactionValidator
+from flare_defai.blockchain.explorer import BlockExplorerService
 
 logger = structlog.get_logger(__name__)
 
@@ -40,6 +43,7 @@ def create_app() -> FastAPI:
        - FlareProvider for blockchain interactions
        - Vtpm for attestation services
        - PromptService for managing chat prompts
+       - SecureTransactionValidator for transaction validation
     4. Sets up routing for chat endpoints
 
     Returns:
@@ -66,13 +70,28 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    
+    # Initialize providers
+    ai_provider = GeminiProvider(api_key=settings.gemini_api_key, model=settings.gemini_model)
+    blockchain_provider = FlareProvider(web3_provider_url=settings.web3_provider_url)
+    attestation_provider = Vtpm(simulate=settings.simulate_attestation)
+    prompt_service = PromptService()
+    
+    # Initialize transaction validator directly instead of using the dependency
+    explorer_service = BlockExplorerService(base_url=settings.web3_explorer_url)
+    transaction_validator = SecureTransactionValidator(
+        web3=blockchain_provider.w3,
+        explorer_service=explorer_service,
+        ai_provider=ai_provider
+    )
 
     # Initialize router with service providers
     chat = ChatRouter(
-        ai=GeminiProvider(api_key=settings.gemini_api_key, model=settings.gemini_model),
-        blockchain=FlareProvider(web3_provider_url=settings.web3_provider_url),
-        attestation=Vtpm(simulate=settings.simulate_attestation),
-        prompts=PromptService(),
+        ai=ai_provider,
+        blockchain=blockchain_provider,
+        attestation=attestation_provider,
+        prompts=prompt_service,
+        transaction_validator=transaction_validator,
     )
 
     # Register chat routes with API

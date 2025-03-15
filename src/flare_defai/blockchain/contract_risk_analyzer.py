@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any, Set, Tuple
 import structlog
 from web3 import Web3
 
-from flare_defai.ai.gemini import GeminiAIProvider
+from flare_defai.ai.gemini import GeminiProvider
 from flare_defai.blockchain.explorer import BlockExplorerService
 
 logger = structlog.get_logger(__name__)
@@ -133,7 +133,7 @@ class ContractRiskAnalyzer:
         self, 
         web3: Web3, 
         explorer_service: BlockExplorerService, 
-        ai_provider: GeminiAIProvider
+        ai_provider: GeminiProvider
     ):
         """
         Initialize the contract risk analyzer.

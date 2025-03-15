@@ -25,6 +25,8 @@ from flare_defai.blockchain import FlareProvider
 from flare_defai.blockchain.defi import DeFiService
 from flare_defai.prompts import PromptService, SemanticRouterResponse
 from flare_defai.settings import settings
+from flare_defai.blockchain.transaction_validator import SecureTransactionValidator, TransactionRisk
+from flare_defai.api.dependencies import get_transaction_validator
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -63,6 +65,7 @@ class ChatRouter:
         blockchain: FlareProvider,
         attestation: Vtpm,
         prompts: PromptService,
+        transaction_validator: SecureTransactionValidator = None,
     ) -> None:
         """
         Initialize the ChatRouter with required service providers.
@@ -72,6 +75,7 @@ class ChatRouter:
             blockchain: Provider for blockchain operations
             attestation: Provider for attestation services
             prompts: Service for managing prompts
+            transaction_validator: Provider for transaction validation
         """
         self._router = APIRouter()
         self.ai = ai
@@ -80,6 +84,7 @@ class ChatRouter:
         self.prompts = prompts
         self.logger = logger.bind(router="chat")
         self.defi = DeFiService(self.blockchain.w3)
+        self.transaction_validator = transaction_validator
         self._setup_routes()
 
     def _setup_routes(self) -> None:
@@ -125,6 +130,29 @@ class ChatRouter:
                             # Get transaction description before sending
                             tx_description = self.blockchain.tx_queue[0].msg
                             self.logger.info(f"Processing transaction {i+1}/{tx_count}: {tx_description}")
+                            
+                            # Get the transaction from the queue without popping it yet
+                            current_tx = self.blockchain.tx_queue[0].tx
+                            
+                            # Validate the transaction if a validator is available
+                            if self.transaction_validator:
+                                validation_result = await self.validate_transaction_before_sending(current_tx)
+                                
+                                # If the transaction is deemed invalid (high risk), don't send it
+                                if not validation_result["is_valid"]:
+                                    self.logger.warning(
+                                        "transaction_blocked_by_validation",
+                                        risk_level=validation_result["risk_level"],
+                                        warnings=validation_result.get("warnings", [])
+                                    )
+                                    return {"response": validation_result["message"]}
+                                
+                                # For medium/low risk transactions, inform the user but proceed
+                                if validation_result["risk_level"] not in ["safe", "unknown"]:
+                                    self.logger.info(
+                                        "transaction_validated_with_warnings",
+                                        risk_level=validation_result["risk_level"]
+                                    )
                             
                             # Send the transaction and get the hash
                             tx_hash = self.blockchain.send_tx_in_queue()
@@ -683,3 +711,55 @@ class ChatRouter:
         """
         response = self.ai.send_message(message)
         return {"response": response.text}
+        
+    async def validate_transaction_before_sending(self, tx: dict) -> dict[str, str]:
+        """
+        Validate a transaction before sending it to the blockchain.
+        
+        Args:
+            tx: Transaction dictionary to validate
+            
+        Returns:
+            A dictionary with validation status and details
+        """
+        if not self.transaction_validator:
+            # If no validator is available, allow the transaction
+            return {"is_valid": True, "risk_level": "unknown", "message": "Transaction validation not available"}
+            
+        try:
+            # Validate the transaction using the SecureTransactionValidator
+            result = await self.transaction_validator.validate_transaction(
+                tx=tx,
+                sender_address=self.blockchain.address,
+            )
+            
+            # Create a user-friendly message based on the validation result
+            if result.risk_level == TransactionRisk.CRITICAL:
+                message = f"⚠️ CRITICAL RISK: This transaction was blocked for your safety. {result.recommendation}"
+                return {"is_valid": False, "risk_level": result.risk_level.value, "message": message, "warnings": result.warnings}
+                
+            elif result.risk_level == TransactionRisk.HIGH:
+                # Only show warning but allow HIGH risk transactions to proceed
+                message = f"⚠️ HIGH RISK: This transaction is potentially dangerous. HIGH RISK DETECTED. Transaction should be carefully reviewed before proceeding.\nWarnings: {', '.join(result.warnings[:3]) if result.warnings else ''}"
+                return {"is_valid": True, "risk_level": result.risk_level.value, "message": message, "warnings": result.warnings}
+                
+            elif result.risk_level == TransactionRisk.MEDIUM:
+                message = f"⚠️ MEDIUM RISK: Exercise caution with this transaction. {result.recommendation}"
+                return {"is_valid": True, "risk_level": result.risk_level.value, "message": message, "warnings": result.warnings}
+                
+            elif result.risk_level == TransactionRisk.LOW:
+                message = f"ℹ️ LOW RISK: Transaction appears mostly safe. {result.recommendation}"
+                return {"is_valid": True, "risk_level": result.risk_level.value, "message": message}
+                
+            else:  # SAFE
+                message = "✅ SAFE: Transaction has passed all security checks."
+                return {"is_valid": True, "risk_level": result.risk_level.value, "message": message}
+                
+        except Exception as e:
+            self.logger.exception("transaction_validation_failed", error=str(e))
+            # If validation fails, allow the transaction but warn the user
+            return {
+                "is_valid": True, 
+                "risk_level": "unknown", 
+                "message": f"Transaction validation failed: {str(e)}. Proceed with caution."
+            }
